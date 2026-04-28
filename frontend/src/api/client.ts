@@ -40,6 +40,8 @@ export const adminApi = {
     global_llm_model?: string
     discord_cache_ttl?: number
     local_system_prompt?: string
+    local_torch_dtype?: string
+    local_quantization_mode?: string
   }) => api.patch('/api/admin/settings', data),
   getGuilds: () => api.get<GuildAdminInfo[]>('/api/admin/guilds'),
   toggleGuild: (guildId: string, botEnabled: boolean) =>

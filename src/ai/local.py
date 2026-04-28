@@ -30,6 +30,9 @@ class LocalAI:
         self._generator = None
         self._lock = threading.Lock()
         self._gen_lock = threading.Lock()
+        # Generation config (can be updated at runtime via admin UI)
+        self._torch_dtype: str = "bfloat16" if cpu_only_mode else "auto"
+        self._quantization_mode: str = "none" if cpu_only_mode else "4bit"
 
     def _ensure_model(self) -> SentenceTransformer:
         if self._model is None:
@@ -57,23 +60,64 @@ class LocalAI:
                     logger.info("Loading AI text generation model...")
                     logger.debug("Generation model: %s", self._generation_model_name)
                     logger.debug("Text-generation pipeline device mode: %s", "cpu" if self._cpu_only_mode else "auto")
+                    _DTYPE_MAP = {
+                        "auto": "auto",
+                        "bfloat16": torch.bfloat16,
+                        "float16": torch.float16,
+                        "float32": torch.float32,
+                    }
+                    resolved_dtype = _DTYPE_MAP.get(self._torch_dtype, torch.bfloat16)
+
                     if self._cpu_only_mode:
                         self._generator = pipeline(
                             "text-generation",
                             model=self._generation_model_name,
                             device=-1,
-                            torch_dtype=torch.bfloat16,
+                            torch_dtype=resolved_dtype,
                         )
                     else:
-                        bnb_cfg = BitsAndBytesConfig(load_in_4bit=True)
+                        pipeline_kwargs: dict = {
+                            "device_map": "auto",
+                        }
+                        if self._quantization_mode == "4bit":
+                            pipeline_kwargs["model_kwargs"] = {
+                                "quantization_config": BitsAndBytesConfig(load_in_4bit=True)
+                            }
+                        elif self._quantization_mode == "8bit":
+                            pipeline_kwargs["model_kwargs"] = {
+                                "quantization_config": BitsAndBytesConfig(load_in_8bit=True)
+                            }
+                        else:
+                            pipeline_kwargs["torch_dtype"] = resolved_dtype
                         self._generator = pipeline(
                             "text-generation",
                             model=self._generation_model_name,
-                            device_map="auto",
-                            model_kwargs={"quantization_config": bnb_cfg},
+                            **pipeline_kwargs,
                         )
                     logger.info("AI text generation model is ready.")
         return self._generator
+
+    def update_generation_config(
+        self,
+        torch_dtype: str | None = None,
+        quantization_mode: str | None = None,
+    ) -> None:
+        """Update generation config and clear the cached generator."""
+        changed = False
+        if torch_dtype is not None and torch_dtype != self._torch_dtype:
+            self._torch_dtype = torch_dtype
+            changed = True
+        if quantization_mode is not None and quantization_mode != self._quantization_mode:
+            self._quantization_mode = quantization_mode
+            changed = True
+        if changed:
+            with self._gen_lock:
+                self._generator = None
+            logger.info(
+                "Generation config updated: torch_dtype=%s quantization_mode=%s",
+                self._torch_dtype,
+                self._quantization_mode,
+            )
 
     def reload_generator(self) -> None:
         """Clear the cached generator so it will be reloaded on next use."""

@@ -69,6 +69,8 @@ class AdminSettingsResponse(BaseModel):
     global_llm_model: str
     discord_cache_ttl: int
     local_system_prompt: str
+    local_torch_dtype: str
+    local_quantization_mode: str
 
 
 class AdminSettingsUpdate(BaseModel):
@@ -77,6 +79,8 @@ class AdminSettingsUpdate(BaseModel):
     global_llm_model: str | None = None
     discord_cache_ttl: int | None = None
     local_system_prompt: str | None = None
+    local_torch_dtype: str | None = None
+    local_quantization_mode: str | None = None
 
 
 class GuildAdminInfo(BaseModel):

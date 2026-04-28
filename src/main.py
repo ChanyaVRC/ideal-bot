@@ -79,6 +79,11 @@ class IdealBot(commands.Bot):
         asyncio.create_task(self.local_ai.preload())
         logger.info("Background AI model loading has started.")
 
+        # Apply any persisted generation config from DB
+        dtype = await bot_settings_db.get_value(self.db, "local_torch_dtype")
+        quant = await bot_settings_db.get_value(self.db, "local_quantization_mode")
+        self.local_ai.update_generation_config(dtype, quant)
+
         for cog in COGS:
             logger.debug("Loading cog: %s", cog)
             await self.load_extension(cog)
@@ -117,6 +122,9 @@ class IdealBot(commands.Bot):
                 flag = await bot_settings_db.get_value(self.db, "reload_generator_requested")
                 if flag == "1":
                     await bot_settings_db.set_value(self.db, "reload_generator_requested", "0")
+                    dtype = await bot_settings_db.get_value(self.db, "local_torch_dtype")
+                    quant = await bot_settings_db.get_value(self.db, "local_quantization_mode")
+                    self.local_ai.update_generation_config(dtype, quant)
                     logger.info("Generator reload requested via admin panel. Reloading...")
                     asyncio.create_task(self.local_ai.reload_generator_async())
             except Exception:

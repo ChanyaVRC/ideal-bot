@@ -64,6 +64,8 @@ export interface AdminSettings {
   global_llm_model: string
   discord_cache_ttl: number
   local_system_prompt: string
+  local_torch_dtype: string
+  local_quantization_mode: string
 }
 
 export interface GuildAdminInfo {

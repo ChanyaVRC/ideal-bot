@@ -18,6 +18,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 function GlobalSettings() {
   const [settings, setSettings] = useState<AdminSettings | null>(null)
@@ -43,6 +50,8 @@ function GlobalSettings() {
         global_llm_model: settings.global_llm_model,
         discord_cache_ttl: settings.discord_cache_ttl,
         local_system_prompt: settings.local_system_prompt,
+        local_torch_dtype: settings.local_torch_dtype,
+        local_quantization_mode: settings.local_quantization_mode,
       })
       setApiKey('')
       setSaved(true)
@@ -112,6 +121,45 @@ function GlobalSettings() {
         />
         <p className="text-xs text-muted-foreground">
           使用できる変数: <code>{'{bot_name}'}</code>（Bot名）、<code>{'{target_length}'}</code>（目標文字数）
+        </p>
+      </div>
+      <div className="space-y-1">
+        <Label>ローカル LLM torch_dtype</Label>
+        <Select
+          value={settings.local_torch_dtype}
+          onValueChange={(v) => setSettings({ ...settings, local_torch_dtype: v })}
+        >
+          <SelectTrigger id="local-torch-dtype">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="auto">auto（自動）</SelectItem>
+            <SelectItem value="bfloat16">bfloat16</SelectItem>
+            <SelectItem value="float16">float16</SelectItem>
+            <SelectItem value="float32">float32</SelectItem>
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground">
+          量子化モードが "none" のときに使用されます。CPU モードでは bfloat16 を推奨します。
+        </p>
+      </div>
+      <div className="space-y-1">
+        <Label>量子化モード（GPU 専用）</Label>
+        <Select
+          value={settings.local_quantization_mode}
+          onValueChange={(v) => setSettings({ ...settings, local_quantization_mode: v })}
+        >
+          <SelectTrigger id="local-quantization-mode">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">none（無効）</SelectItem>
+            <SelectItem value="4bit">4-bit（推奨）</SelectItem>
+            <SelectItem value="8bit">8-bit</SelectItem>
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground">
+          bitsandbytes が必要です。CPU モードでは "none" を選択してください。変更後はジェネレーターを再起動してください。
         </p>
       </div>
       <Button onClick={handleSave} disabled={saving}>
