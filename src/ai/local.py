@@ -52,7 +52,8 @@ class LocalAI:
         if self._generator is None:
             with self._gen_lock:
                 if self._generator is None:
-                    from transformers import pipeline
+                    from transformers import pipeline, BitsAndBytesConfig
+                    import torch
                     logger.info("Loading AI text generation model...")
                     logger.debug("Generation model: %s", self._generation_model_name)
                     logger.debug("Text-generation pipeline device mode: %s", "cpu" if self._cpu_only_mode else "auto")
@@ -61,14 +62,15 @@ class LocalAI:
                             "text-generation",
                             model=self._generation_model_name,
                             device=-1,
-                            torch_dtype="auto",
+                            torch_dtype=torch.bfloat16,
                         )
                     else:
+                        bnb_cfg = BitsAndBytesConfig(load_in_4bit=True)
                         self._generator = pipeline(
                             "text-generation",
                             model=self._generation_model_name,
                             device_map="auto",
-                            torch_dtype="auto",
+                            model_kwargs={"quantization_config": bnb_cfg},
                         )
                     logger.info("AI text generation model is ready.")
         return self._generator
