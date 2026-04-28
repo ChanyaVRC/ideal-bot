@@ -26,9 +26,36 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
+def _is_valid_oauth_state(request: Request, received_state: str) -> bool:
+    """Validate state against session while supporting multiple in-flight login attempts."""
+    states = request.session.get("oauth_states")
+    if isinstance(states, list):
+        if received_state in states:
+            # Consume only the matched state and keep the rest.
+            states.remove(received_state)
+            if states:
+                request.session["oauth_states"] = states
+            else:
+                request.session.pop("oauth_states", None)
+            request.session.pop("oauth_state", None)
+            return True
+        return False
+
+    # Backward-compatible fallback for sessions created before this change.
+    single_state = request.session.pop("oauth_state", None)
+    return received_state == single_state
+
+
 @router.get("/login")
 async def login(request: Request, cfg=Depends(get_cfg)):
     state = secrets.token_urlsafe(16)
+    states = request.session.get("oauth_states")
+    if not isinstance(states, list):
+        states = []
+    states.append(state)
+    # Keep only a small number of recent pending states.
+    request.session["oauth_states"] = states[-5:]
+    # Keep legacy key for compatibility with older callbacks.
     request.session["oauth_state"] = state
     logger.info("OAuth login started: client=%s", request.client.host if request.client else "unknown")
     return RedirectResponse(url=oauth_redirect_url(cfg, state))
@@ -58,7 +85,7 @@ async def callback(
     if not code or not state:
         logger.info("OAuth callback rejected: missing code/state")
         raise HTTPException(status_code=400, detail="Missing code or state")
-    if state != request.session.pop("oauth_state", None):
+    if not _is_valid_oauth_state(request, state):
         logger.info("OAuth callback rejected: invalid state")
         raise HTTPException(status_code=400, detail="Invalid state parameter")
 
