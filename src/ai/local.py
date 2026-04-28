@@ -70,8 +70,22 @@ class LocalAI:
                         "bfloat16": torch.bfloat16,
                         "float16": torch.float16,
                         "float32": torch.float32,
+                        "float64": torch.float64,
+                        # Shell dtypes are available only on newer torch builds.
+                        "float8_e4m3fn": getattr(torch, "float8_e4m3fn", None),
+                        "float8_e5m2": getattr(torch, "float8_e5m2", None),
+                        "float8_e4m3fnuz": getattr(torch, "float8_e4m3fnuz", None),
+                        "float8_e5m2fnuz": getattr(torch, "float8_e5m2fnuz", None),
+                        "float8_e8m0fnu": getattr(torch, "float8_e8m0fnu", None),
+                        "float4_e2m1fn_x2": getattr(torch, "float4_e2m1fn_x2", None),
                     }
-                    resolved_dtype = _DTYPE_MAP.get(self._torch_dtype, torch.bfloat16)
+                    resolved_dtype = _DTYPE_MAP.get(self._torch_dtype)
+                    if resolved_dtype is None:
+                        logger.warning(
+                            "Unsupported or unavailable torch_dtype '%s'; falling back to bfloat16",
+                            self._torch_dtype,
+                        )
+                        resolved_dtype = torch.bfloat16
 
                     tokenizer_kwargs: dict = {}
                     # Work around known tokenizer regex issue on recent Mistral/Ministral models.
