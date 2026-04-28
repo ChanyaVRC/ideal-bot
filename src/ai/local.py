@@ -84,16 +84,16 @@ class LocalAI:
                     )
 
                     if self._cpu_only_mode:
-                        model = AutoModelForCausalLM.from_pretrained(
-                            self._generation_model_name,
-                            torch_dtype=resolved_dtype,
-                            trust_remote_code=True,
-                        )
+                        # Use pipeline directly so models that load as
+                        # ConditionalGeneration (e.g. Mistral3) are also
+                        # accepted; AutoModelForCausalLM rejects those configs.
                         self._generator = pipeline(
                             "text-generation",
-                            model=model,
+                            model=self._generation_model_name,
                             tokenizer=tokenizer,
                             device=-1,
+                            torch_dtype=resolved_dtype,
+                            trust_remote_code=True,
                         )
                     else:
                         model_kwargs: dict = {
