@@ -31,8 +31,8 @@ class LocalAI:
         self._lock = threading.Lock()
         self._gen_lock = threading.Lock()
         # Generation config (can be updated at runtime via admin UI)
-        self._torch_dtype: str = "bfloat16" if cpu_only_mode else "auto"
-        self._quantization_mode: str = "none" if cpu_only_mode else "4bit"
+        self._torch_dtype: str = "auto"
+        self._quantization_mode: str = "4bit"
 
     def _ensure_model(self) -> SentenceTransformer:
         if self._model is None:
@@ -72,9 +72,6 @@ class LocalAI:
                         "float32": torch.float32,
                     }
                     resolved_dtype = _DTYPE_MAP.get(self._torch_dtype, torch.bfloat16)
-                    if self._cpu_only_mode and resolved_dtype == "auto":
-                        # Avoid passing string "auto" on CPU where some model loaders reject it.
-                        resolved_dtype = torch.bfloat16
 
                     tokenizer_kwargs: dict = {}
                     # Work around known tokenizer regex issue on recent Mistral/Ministral models.
