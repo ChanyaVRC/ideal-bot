@@ -1,0 +1,111 @@
+{
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // Discord Bot 基本設定
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  // [必須] Discord Bot トークン
+  // Discord Developer Portal > Bot > Token からコピーします。
+  // 絶対に公開リポジトリにコミットしないでください。
+  "discord_token": "",
+
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // セキュリティ
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  // [必須] LLM API キー等の暗号化に使う Fernet キー（Base64URL、32 バイト）
+  // 生成方法:
+  //   uv run python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+  // 一度設定したら変更しないでください（変更すると既存の暗号化データが読めなくなります）。
+  "encryption_master_key": "",
+
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // AI / 発言生成
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  // 単語カテゴリの正規化方式
+  // "reading" : 読み（ひらがな）で正規化。日本語語彙向け（推奨）。
+  // "word"    : 表記そのままで正規化。
+  "category_normalization": "reading",
+
+  // ローカル AI に使う SentenceTransformers モデル名
+  // 初回起動時に HuggingFace から自動ダウンロードされます（数百 MB）。
+  // 多言語対応モデル例:
+  //   "paraphrase-multilingual-MiniLM-L12-v2" （デフォルト・軽量）
+  //   "paraphrase-multilingual-mpnet-base-v2" （高精度・重い）
+  "sentence_transformer_model": "paraphrase-multilingual-MiniLM-L12-v2",
+
+  // ローカル文章生成に使うモデル名（LLM API未設定時に使用）
+  // Transformers 形式のモデルを指定してください（GGUF は非対応）。
+  "local_generation_model": "mistralai/Ministral-3-14B-Instruct-2512",
+
+  // true の場合、埋め込みモデル/文章生成モデルを CPU のみで実行します。
+  // GPU が使える環境でも強制的に CPU 実行になります。
+  "cpu_only_mode": false,
+
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // 応答遅延（Bot の「人間らしさ」の調整）
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  // メッセージを「読む」時間の最小値（秒）
+  // この値と delay_read_max の間でランダムに待機してからタイピングを開始します。
+  "delay_read_min": 10,
+
+  // メッセージを「読む」時間の最大値（秒）
+  "delay_read_max": 30,
+
+  // タイピング速度（文字/秒）
+  // 発言文字数 ÷ この値 = タイピング待機時間（秒）になります。
+  // 人間の平均的なタイピング速度は 5〜8 文字/秒 程度です。
+  "delay_type_cps": 5,
+
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // データベース
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  // 会話ログの保持期間（日）
+  // 古いログは自動的に削除されます。0 で無期限保持。
+  "conversation_log_retention_days": 7,
+
+  // SQLite データベースファイルのパス
+  // 相対パスの場合は起動ディレクトリ基準です。
+  // Docker 環境では Dockerfile の ENV が自動的に /data/ideal_bot.db を設定するため変更不要です。
+  "db_path": "ideal_bot.db",
+
+  // ログレベル
+  // 利用可能: "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"
+  "log_level": "INFO",
+
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // Web API / 管理画面
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  // 管理画面の公開 URL（Bot の /dashboard コマンドで案内する URL）
+  // OAuth2 コールバック URL とフロントエンド CORS は、この値を元に自動設定されます。
+  // 本番環境では実際のドメインに変更してください（例: "https://your-domain.com"）。
+  "web_url": "http://localhost:8000",
+
+  // [Web 管理画面必須] Discord OAuth2 クライアント ID
+  // Discord Developer Portal > OAuth2 > Client ID からコピーします。
+  "discord_client_id": "",
+
+  // [Web 管理画面必須] Discord OAuth2 クライアントシークレット
+  // Discord Developer Portal > OAuth2 > Client Secret からコピーします。
+  "discord_client_secret": "",
+
+  // [Web 管理画面必須] セッション署名キー（任意の長いランダム文字列）
+  // 生成方法:
+  //   uv run python -c "import secrets; print(secrets.token_hex(32))"
+  "session_secret": "",
+
+  // Bot 管理者の Discord ユーザー ID（数値を文字列で列挙）
+  // ここに指定したユーザーは全サーバーの設定を変更できます。
+  // ユーザー ID の確認方法: Discord 設定 > 詳細設定 > 開発者モードを有効にして
+  //   ユーザー名を右クリック > 「ユーザー ID をコピー」
+  "bot_admin_ids": []
+
+  // 以下の項目は通常変更不要です（省略した場合はデフォルト値が使われます）:
+  // "discord_redirect_uri" : web_url + "/auth/callback" として自動設定
+  // "frontend_url"         : web_url と同じ値として自動設定（開発時は "http://localhost:5173" を指定）
+  // "web_host"             : "0.0.0.0"（全インターフェース）
+  // "web_port"             : 8000
+}
