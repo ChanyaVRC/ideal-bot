@@ -2,7 +2,7 @@ name: Deploy
 
 on:
   push:
-    branches: [main]
+    branches: [master]
 
 # DEPLOY_MODE リポジトリ変数で切り替える（Settings > Variables > Actions）
 # docker   : Docker Compose でデプロイ（デフォルト）
