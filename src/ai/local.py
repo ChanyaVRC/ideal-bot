@@ -101,6 +101,7 @@ class LocalAI:
                         # Use pipeline directly so models that load as
                         # ConditionalGeneration (e.g. Mistral3) are also
                         # accepted; AutoModelForCausalLM rejects those configs.
+                        # Use memory-efficient settings for CPU: float16 weights, low memory usage
                         self._generator = pipeline(
                             "text-generation",
                             model=self._generation_model_name,
@@ -108,6 +109,7 @@ class LocalAI:
                             device=-1,
                             torch_dtype=resolved_dtype,
                             trust_remote_code=True,
+                            model_kwargs={"low_cpu_mem_usage": True},
                         )
                     else:
                         model_kwargs: dict = {
@@ -370,11 +372,10 @@ class LocalAI:
 
         for word, emb_bytes in word_embeddings:
             if emb_bytes:
-                word_emb = np.frombuffer(emb_bytes, dtype=np.float32).copy()
-                norm = float(np.linalg.norm(word_emb))
-                if norm > 0:
-                    word_emb /= norm
-                scored.append((word, float(np.dot(ctx_emb, word_emb))))
+                # Use frombuffer view (no copy) since embeddings are already normalized in storage
+                # ctx_emb is normalized (normalize_embeddings=True); dot product = cosine similarity
+                word_emb_view = np.frombuffer(emb_bytes, dtype=np.float32)
+                scored.append((word, float(np.dot(ctx_emb, word_emb_view))))
             else:
                 unembedded.append(word)
 
