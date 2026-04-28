@@ -25,6 +25,35 @@ from src.ai.local import DEFAULT_LOCAL_SYSTEM_PROMPT
 
 router = APIRouter(dependencies=[Depends(require_bot_admin)])
 
+_KNOWN_DTYPES = [
+    "auto",
+    "bfloat16",
+    "float16",
+    "float32",
+    "float64",
+    "float8_e4m3fn",
+    "float8_e5m2",
+    "float8_e4m3fnuz",
+    "float8_e5m2fnuz",
+    "float8_e8m0fnu",
+    "float4_e2m1fn_x2",
+]
+
+
+def _get_supported_torch_dtypes() -> list[str]:
+    supported = ["auto"]
+    try:
+        import torch
+    except Exception:
+        return supported
+
+    for dtype_name in _KNOWN_DTYPES:
+        if dtype_name == "auto":
+            continue
+        if getattr(torch, dtype_name, None) is not None:
+            supported.append(dtype_name)
+    return supported
+
 
 @router.get("/settings", response_model=AdminSettingsResponse)
 async def get_settings(
@@ -37,6 +66,7 @@ async def get_settings(
     ttl_str = await bot_settings_db.get_value(db, "discord_cache_ttl")
     local_sys = await bot_settings_db.get_value(db, "local_system_prompt") or DEFAULT_LOCAL_SYSTEM_PROMPT
     local_dtype = await bot_settings_db.get_value(db, "local_torch_dtype") or "auto"
+    supported_dtypes = _get_supported_torch_dtypes()
     local_quant = await bot_settings_db.get_value(db, "local_quantization_mode") or "4bit"
     return AdminSettingsResponse(
         has_global_api_key=has_key,
@@ -46,6 +76,7 @@ async def get_settings(
         cpu_only_mode=cfg.cpu_only_mode,
         local_system_prompt=local_sys,
         local_torch_dtype=local_dtype,
+        local_supported_torch_dtypes=supported_dtypes,
         local_quantization_mode=local_quant,
     )
 
@@ -73,11 +104,20 @@ async def update_settings(
         await bot_settings_db.set_value(db, "discord_cache_ttl", str(body.discord_cache_ttl))
     if body.local_system_prompt is not None:
         await bot_settings_db.set_value(db, "local_system_prompt", body.local_system_prompt)
-    _VALID_DTYPES = {"auto", "bfloat16", "float16", "float32"}
+    _VALID_DTYPES = set(_KNOWN_DTYPES)
+    _SUPPORTED_DTYPES = set(_get_supported_torch_dtypes())
     _VALID_QUANT = {"none", "4bit", "8bit"}
     if body.local_torch_dtype is not None:
         if body.local_torch_dtype not in _VALID_DTYPES:
             raise HTTPException(status_code=422, detail=f"local_torch_dtype must be one of {sorted(_VALID_DTYPES)}")
+        if body.local_torch_dtype not in _SUPPORTED_DTYPES:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "local_torch_dtype is not supported in this runtime. "
+                    f"supported: {sorted(_SUPPORTED_DTYPES)}"
+                ),
+            )
         await bot_settings_db.set_value(db, "local_torch_dtype", body.local_torch_dtype)
     if body.local_quantization_mode is not None:
         if body.local_quantization_mode not in _VALID_QUANT:

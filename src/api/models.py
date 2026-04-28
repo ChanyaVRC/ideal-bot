@@ -71,6 +71,7 @@ class AdminSettingsResponse(BaseModel):
     cpu_only_mode: bool
     local_system_prompt: str
     local_torch_dtype: str
+    local_supported_torch_dtypes: list[str]
     local_quantization_mode: str
 
 

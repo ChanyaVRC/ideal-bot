@@ -66,6 +66,7 @@ export interface AdminSettings {
   cpu_only_mode: boolean
   local_system_prompt: string
   local_torch_dtype: string
+  local_supported_torch_dtypes: string[]
   local_quantization_mode: string
 }
 

@@ -26,6 +26,20 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 
+const DTYPE_LABELS: Record<string, string> = {
+  auto: 'auto（自動）',
+  bfloat16: 'bfloat16',
+  float16: 'float16',
+  float32: 'float32',
+  float64: 'float64',
+  float8_e4m3fn: 'float8_e4m3fn',
+  float8_e5m2: 'float8_e5m2',
+  float8_e4m3fnuz: 'float8_e4m3fnuz',
+  float8_e5m2fnuz: 'float8_e5m2fnuz',
+  float8_e8m0fnu: 'float8_e8m0fnu',
+  float4_e2m1fn_x2: 'float4_e2m1fn_x2',
+}
+
 function GlobalSettings() {
   const [settings, setSettings] = useState<AdminSettings | null>(null)
   const [apiKey, setApiKey] = useState('')
@@ -62,6 +76,9 @@ function GlobalSettings() {
   }
 
   if (!settings) return <p className="text-muted-foreground text-sm">読み込み中…</p>
+
+  const supportedDtypes = settings.local_supported_torch_dtypes ?? ['auto', 'bfloat16', 'float16', 'float32']
+  const currentDtypeSupported = supportedDtypes.includes(settings.local_torch_dtype)
 
   return (
     <div className="space-y-4 max-w-lg">
@@ -133,14 +150,21 @@ function GlobalSettings() {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="auto">auto（自動）</SelectItem>
-            <SelectItem value="bfloat16">bfloat16</SelectItem>
-            <SelectItem value="float16">float16</SelectItem>
-            <SelectItem value="float32">float32</SelectItem>
+            {supportedDtypes.map((dtype) => (
+              <SelectItem key={dtype} value={dtype}>
+                {DTYPE_LABELS[dtype] ?? dtype}
+              </SelectItem>
+            ))}
+            {!currentDtypeSupported && (
+              <SelectItem value={settings.local_torch_dtype} disabled>
+                {settings.local_torch_dtype}（現在値: 未対応）
+              </SelectItem>
+            )}
           </SelectContent>
         </Select>
         <p className="text-xs text-muted-foreground">
-          量子化モードが "none" のときに使用されます。CPU モードでは bfloat16 を推奨します。
+          量子化モードが "none" のときに使用されます。CPU モードでは bfloat16 を推奨します。float8/float4 は
+          shell dtype のため、環境によっては未対応です。
         </p>
       </div>
       <div className="space-y-1">
