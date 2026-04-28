@@ -169,3 +169,10 @@ async def request_sync_commands(db: Annotated[aiosqlite.Connection, Depends(get_
     """Set a flag in bot_settings that the bot polls to trigger tree.sync()."""
     await bot_settings_db.set_value(db, "sync_commands_requested", "1")
     return {"ok": True}
+
+
+@router.post("/reload-generator")
+async def request_reload_generator(db: Annotated[aiosqlite.Connection, Depends(get_db)]):
+    """Set a flag in bot_settings that the bot polls to trigger generator reload."""
+    await bot_settings_db.set_value(db, "reload_generator_requested", "1")
+    return {"ok": True}

@@ -48,6 +48,7 @@
 | `POST` | [/api/admin/fallback-responses](./api-admin#post-apiadminfallback-responses) | 要 Bot 管理者 | フォールバック応答追加 |
 | `DELETE` | [/api/admin/fallback-responses/{id}](./api-admin#delete-apiadminfallback-responsesresponse_id) | 要 Bot 管理者 | フォールバック応答削除 |
 | `POST` | [/api/admin/sync-commands](./api-admin#post-apiadminsync-commands) | 要 Bot 管理者 | スラッシュコマンド再同期 |
+| `POST` | [/api/admin/reload-generator](./api-admin#post-apiadminreload-generator) | 要 Bot 管理者 | ローカル AI 生成モデル再ロード |
 
 ## エラーレスポンス
 

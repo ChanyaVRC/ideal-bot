@@ -75,6 +75,20 @@ class LocalAI:
                     logger.info("AI text generation model is ready.")
         return self._generator
 
+    def reload_generator(self) -> None:
+        """Clear the cached generator so it will be reloaded on next use."""
+        with self._gen_lock:
+            self._generator = None
+        logger.info("Generator cache cleared; will reload on next use.")
+
+    async def reload_generator_async(self) -> None:
+        """Clear and immediately reload the generator in a background thread."""
+        self.reload_generator()
+        if self._generation_model_name:
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, self._ensure_generator)
+            logger.info("Generator reloaded successfully.")
+
     @property
     def can_generate(self) -> bool:
         return bool(self._generation_model_name)

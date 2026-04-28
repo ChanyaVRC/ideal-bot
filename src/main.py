@@ -92,6 +92,7 @@ class IdealBot(commands.Bot):
             logger.info("Skipped slash command sync due to configuration.")
 
         asyncio.create_task(self._sync_commands_poller())
+        asyncio.create_task(self._reload_generator_poller())
         logger.debug("Sync commands poller task started.")
         logger.info("Bot initialization is complete.")
 
@@ -107,6 +108,19 @@ class IdealBot(commands.Bot):
                     logger.info("Command tree re-synced via admin request.")
             except Exception:
                 logger.exception("Error in sync commands poller")
+
+    async def _reload_generator_poller(self) -> None:
+        """Poll bot_settings for a generator reload request from the admin API."""
+        while not self.is_closed():
+            await asyncio.sleep(30)
+            try:
+                flag = await bot_settings_db.get_value(self.db, "reload_generator_requested")
+                if flag == "1":
+                    await bot_settings_db.set_value(self.db, "reload_generator_requested", "0")
+                    logger.info("Generator reload requested via admin panel. Reloading...")
+                    asyncio.create_task(self.local_ai.reload_generator_async())
+            except Exception:
+                logger.exception("Error in reload generator poller")
 
     async def on_ready(self) -> None:
         assert self.user is not None

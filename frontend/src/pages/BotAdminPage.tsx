@@ -26,6 +26,8 @@ function GlobalSettings() {
   const [saved, setSaved] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [syncDone, setSyncDone] = useState(false)
+  const [reloading, setReloading] = useState(false)
+  const [reloadDone, setReloadDone] = useState(false)
 
   useEffect(() => {
     adminApi.getSettings().then((r) => setSettings(r.data)).catch(() => {})
@@ -136,6 +138,29 @@ function GlobalSettings() {
           disabled={syncing}
         >
           {syncing ? 'リクエスト送信中…' : syncDone ? '送信しました ✓' : 'コマンドを再同期'}
+        </Button>
+      </div>
+      <Separator />
+      <div className="space-y-1">
+        <p className="text-sm font-medium">ローカル AI ジェネレーターの再起動</p>
+        <p className="text-xs text-muted-foreground">
+          ローカル生成モデルをリロードします。モデルの再ロードには数分かかる場合があります。最大30秒ほどでリクエストが処理されます。
+        </p>
+        <Button
+          variant="outline"
+          onClick={async () => {
+            setReloading(true)
+            try {
+              await adminApi.reloadGenerator()
+              setReloadDone(true)
+              setTimeout(() => setReloadDone(false), 3000)
+            } finally {
+              setReloading(false)
+            }
+          }}
+          disabled={reloading}
+        >
+          {reloading ? 'リクエスト送信中…' : reloadDone ? '送信しました ✓' : 'ジェネレーターを再起動'}
         </Button>
       </div>
     </div>

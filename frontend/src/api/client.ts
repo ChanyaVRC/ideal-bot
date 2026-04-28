@@ -51,6 +51,7 @@ export const adminApi = {
   deleteFallbackResponse: (responseId: number) =>
     api.delete(`/api/admin/fallback-responses/${responseId}`),
   syncCommands: () => api.post('/api/admin/sync-commands'),
+  reloadGenerator: () => api.post('/api/admin/reload-generator'),
   getLogs: (params?: { limit?: number; offset?: number; guild_id?: string }) =>
     api.get<ConversationLogEntry[]>('/api/admin/logs', { params }),
 }
