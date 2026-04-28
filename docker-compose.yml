@@ -4,7 +4,12 @@ services:
     command: python -m src.main
     restart: unless-stopped
     volumes:
-      - ./config.json:/app/config.json:ro
+      - type: bind
+        source: ${CONFIG_FILE:-./config.json}
+        target: /app/config.json
+        read_only: true
+        bind:
+          create_host_path: false
       - data:/data
       - hf_cache:/root/.cache/huggingface
     depends_on:
@@ -21,7 +26,12 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./config.json:/app/config.json:ro
+      - type: bind
+        source: ${CONFIG_FILE:-./config.json}
+        target: /app/config.json
+        read_only: true
+        bind:
+          create_host_path: false
       - data:/data
       - hf_cache:/root/.cache/huggingface
 
