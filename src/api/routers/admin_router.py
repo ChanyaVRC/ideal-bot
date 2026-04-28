@@ -43,6 +43,7 @@ async def get_settings(
         global_llm_provider=provider,
         global_llm_model=model,
         discord_cache_ttl=int(ttl_str) if ttl_str else 300,
+        cpu_only_mode=cfg.cpu_only_mode,
         local_system_prompt=local_sys,
         local_torch_dtype=local_dtype,
         local_quantization_mode=local_quant,

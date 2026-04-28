@@ -146,6 +146,7 @@ function GlobalSettings() {
       <div className="space-y-1">
         <Label>量子化モード（GPU 専用）</Label>
         <Select
+          disabled={settings.cpu_only_mode}
           value={settings.local_quantization_mode}
           onValueChange={(v) => setSettings({ ...settings, local_quantization_mode: v })}
         >
@@ -159,7 +160,9 @@ function GlobalSettings() {
           </SelectContent>
         </Select>
         <p className="text-xs text-muted-foreground">
-          bitsandbytes が必要です。CPU モードでは "none" を選択してください。変更後はジェネレーターを再起動してください。
+          bitsandbytes が必要です。{settings.cpu_only_mode
+            ? 'CPU モードでは変更できません。'
+            : '変更後はジェネレーターを再起動してください。'}
         </p>
       </div>
       <Button onClick={handleSave} disabled={saving}>

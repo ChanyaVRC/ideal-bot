@@ -68,6 +68,7 @@ class AdminSettingsResponse(BaseModel):
     global_llm_provider: str
     global_llm_model: str
     discord_cache_ttl: int
+    cpu_only_mode: bool
     local_system_prompt: str
     local_torch_dtype: str
     local_quantization_mode: str

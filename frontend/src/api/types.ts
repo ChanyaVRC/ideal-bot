@@ -63,6 +63,7 @@ export interface AdminSettings {
   global_llm_provider: string
   global_llm_model: string
   discord_cache_ttl: number
+  cpu_only_mode: boolean
   local_system_prompt: string
   local_torch_dtype: string
   local_quantization_mode: string
