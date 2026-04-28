@@ -55,7 +55,12 @@ class LocalAI:
         if self._generator is None:
             with self._gen_lock:
                 if self._generator is None:
-                    from transformers import pipeline, BitsAndBytesConfig
+                    from transformers import (
+                        AutoModelForCausalLM,
+                        AutoTokenizer,
+                        BitsAndBytesConfig,
+                        pipeline,
+                    )
                     import torch
                     logger.info("Loading AI text generation model...")
                     logger.debug("Generation model: %s", self._generation_model_name)
@@ -67,33 +72,64 @@ class LocalAI:
                         "float32": torch.float32,
                     }
                     resolved_dtype = _DTYPE_MAP.get(self._torch_dtype, torch.bfloat16)
+                    if self._cpu_only_mode and resolved_dtype == "auto":
+                        # Avoid passing string "auto" on CPU where some model loaders reject it.
+                        resolved_dtype = torch.bfloat16
+
+                    tokenizer_kwargs: dict = {}
+                    # Work around known tokenizer regex issue on recent Mistral/Ministral models.
+                    if "mistral" in self._generation_model_name.lower():
+                        tokenizer_kwargs["fix_mistral_regex"] = True
+                    tokenizer = AutoTokenizer.from_pretrained(
+                        self._generation_model_name,
+                        trust_remote_code=True,
+                        **tokenizer_kwargs,
+                    )
 
                     if self._cpu_only_mode:
+                        model = AutoModelForCausalLM.from_pretrained(
+                            self._generation_model_name,
+                            torch_dtype=resolved_dtype,
+                            trust_remote_code=True,
+                        )
                         self._generator = pipeline(
                             "text-generation",
-                            model=self._generation_model_name,
+                            model=model,
+                            tokenizer=tokenizer,
                             device=-1,
-                            torch_dtype=resolved_dtype,
                         )
                     else:
-                        pipeline_kwargs: dict = {
+                        model_kwargs: dict = {
                             "device_map": "auto",
                         }
                         if self._quantization_mode == "4bit":
-                            pipeline_kwargs["model_kwargs"] = {
-                                "quantization_config": BitsAndBytesConfig(load_in_4bit=True)
-                            }
+                            model_kwargs["quantization_config"] = BitsAndBytesConfig(load_in_4bit=True)
                         elif self._quantization_mode == "8bit":
-                            pipeline_kwargs["model_kwargs"] = {
-                                "quantization_config": BitsAndBytesConfig(load_in_8bit=True)
-                            }
+                            model_kwargs["quantization_config"] = BitsAndBytesConfig(load_in_8bit=True)
                         else:
-                            pipeline_kwargs["torch_dtype"] = resolved_dtype
-                        self._generator = pipeline(
-                            "text-generation",
-                            model=self._generation_model_name,
-                            **pipeline_kwargs,
-                        )
+                            model_kwargs["torch_dtype"] = resolved_dtype
+                        try:
+                            model = AutoModelForCausalLM.from_pretrained(
+                                self._generation_model_name,
+                                trust_remote_code=True,
+                                **model_kwargs,
+                            )
+                            self._generator = pipeline(
+                                "text-generation",
+                                model=model,
+                                tokenizer=tokenizer,
+                            )
+                        except Exception as exc:
+                            # Fail fast with an actionable message when the configured checkpoint
+                            # is not compatible with CausalLM text generation.
+                            logger.exception(
+                                "AutoModelForCausalLM load failed for %s.",
+                                self._generation_model_name,
+                            )
+                            raise RuntimeError(
+                                "Configured local_generation_model is not compatible with text-generation (CausalLM). "
+                                "Please choose a CausalLM checkpoint (e.g. ...ForCausalLM) or update the model setting."
+                            ) from exc
                     logger.info("AI text generation model is ready.")
         return self._generator
 
@@ -151,7 +187,10 @@ class LocalAI:
         await loop.run_in_executor(None, self._ensure_model)
         if self._generation_model_name:
             logger.debug("Preload step 2/2: loading text generation model")
-            await loop.run_in_executor(None, self._ensure_generator)
+            try:
+                await loop.run_in_executor(None, self._ensure_generator)
+            except Exception:
+                logger.exception("Preload step 2/2 failed: generation model could not be initialized")
         else:
             logger.debug("Preload step 2/2 skipped: generation model is not configured")
         logger.info("Background AI model loading finished.")
@@ -168,7 +207,11 @@ class LocalAI:
         Returns:
             tuple[str, str]: (generated_text, generation_metadata_json)
         """
-        gen = self._ensure_generator()
+        try:
+            gen = self._ensure_generator()
+        except Exception:
+            logger.exception("Generator initialization failed")
+            return ("", json.dumps({"error": "generator_initialization_failed"}, ensure_ascii=False))
         if gen is None:
             return ("", json.dumps({"error": "generator_not_configured"}, ensure_ascii=False))
 
