@@ -3,7 +3,7 @@ import { defineConfig } from 'vitepress'
 export default defineConfig({
   title: 'ideal-bot',
   description: '教えられた語彙で自然に発言する Discord Bot',
-  base: '/ideal-bot/',
+  base: '/',
 
   themeConfig: {
     logo: '/logo.png',
