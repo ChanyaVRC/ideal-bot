@@ -68,6 +68,48 @@ class LocalAI:
                     logger.info("AI embedding model is ready.")
         return self._model
 
+    def _build_cpu_generator(self, tokenizer, resolved_dtype):
+        from transformers import pipeline
+        # Use pipeline directly so models that load as ConditionalGeneration (e.g. Mistral3)
+        # are also accepted; AutoModelForCausalLM rejects those configs.
+        return pipeline(
+            "text-generation",
+            model=self._generation_model_name,
+            tokenizer=tokenizer,
+            device=-1,
+            torch_dtype=resolved_dtype,
+            trust_remote_code=True,
+            model_kwargs={"low_cpu_mem_usage": True},
+        )
+
+    def _build_gpu_generator(self, tokenizer, resolved_dtype):
+        from transformers import AutoModelForCausalLM, BitsAndBytesConfig, pipeline
+        model_kwargs: dict = {"device_map": "auto"}
+        if self._quantization_mode == "4bit":
+            model_kwargs["quantization_config"] = BitsAndBytesConfig(load_in_4bit=True)
+        elif self._quantization_mode == "8bit":
+            model_kwargs["quantization_config"] = BitsAndBytesConfig(load_in_8bit=True)
+        else:
+            model_kwargs["torch_dtype"] = resolved_dtype
+        try:
+            model = AutoModelForCausalLM.from_pretrained(
+                self._generation_model_name,
+                trust_remote_code=True,
+                **model_kwargs,
+            )
+            return pipeline("text-generation", model=model, tokenizer=tokenizer)
+        except Exception as exc:
+            # Fail fast with an actionable message when the configured checkpoint
+            # is not compatible with CausalLM text generation.
+            logger.exception(
+                "AutoModelForCausalLM load failed for %s.",
+                self._generation_model_name,
+            )
+            raise RuntimeError(
+                "Configured local_generation_model is not compatible with text-generation (CausalLM). "
+                "Please choose a CausalLM checkpoint (e.g. ...ForCausalLM) or update the model setting."
+            ) from exc
+
     def _ensure_generator(self):
         if not self._generation_model_name:
             logger.debug("Generation model not configured; skipping generator initialization.")
@@ -75,12 +117,7 @@ class LocalAI:
         if self._generator is None:
             with self._gen_lock:
                 if self._generator is None:
-                    from transformers import (
-                        AutoModelForCausalLM,
-                        AutoTokenizer,
-                        BitsAndBytesConfig,
-                        pipeline,
-                    )
+                    from transformers import AutoTokenizer
                     import torch
                     logger.info("Loading AI text generation model...")
                     logger.debug("Generation model: %s", self._generation_model_name)
@@ -104,51 +141,9 @@ class LocalAI:
                     )
 
                     if self._cpu_only_mode:
-                        # Use pipeline directly so models that load as
-                        # ConditionalGeneration (e.g. Mistral3) are also
-                        # accepted; AutoModelForCausalLM rejects those configs.
-                        # Use memory-efficient settings for CPU: float16 weights, low memory usage
-                        self._generator = pipeline(
-                            "text-generation",
-                            model=self._generation_model_name,
-                            tokenizer=tokenizer,
-                            device=-1,
-                            torch_dtype=resolved_dtype,
-                            trust_remote_code=True,
-                            model_kwargs={"low_cpu_mem_usage": True},
-                        )
+                        self._generator = self._build_cpu_generator(tokenizer, resolved_dtype)
                     else:
-                        model_kwargs: dict = {
-                            "device_map": "auto",
-                        }
-                        if self._quantization_mode == "4bit":
-                            model_kwargs["quantization_config"] = BitsAndBytesConfig(load_in_4bit=True)
-                        elif self._quantization_mode == "8bit":
-                            model_kwargs["quantization_config"] = BitsAndBytesConfig(load_in_8bit=True)
-                        else:
-                            model_kwargs["torch_dtype"] = resolved_dtype
-                        try:
-                            model = AutoModelForCausalLM.from_pretrained(
-                                self._generation_model_name,
-                                trust_remote_code=True,
-                                **model_kwargs,
-                            )
-                            self._generator = pipeline(
-                                "text-generation",
-                                model=model,
-                                tokenizer=tokenizer,
-                            )
-                        except Exception as exc:
-                            # Fail fast with an actionable message when the configured checkpoint
-                            # is not compatible with CausalLM text generation.
-                            logger.exception(
-                                "AutoModelForCausalLM load failed for %s.",
-                                self._generation_model_name,
-                            )
-                            raise RuntimeError(
-                                "Configured local_generation_model is not compatible with text-generation (CausalLM). "
-                                "Please choose a CausalLM checkpoint (e.g. ...ForCausalLM) or update the model setting."
-                            ) from exc
+                        self._generator = self._build_gpu_generator(tokenizer, resolved_dtype)
                     logger.info("AI text generation model is ready.")
         return self._generator
 
