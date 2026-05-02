@@ -386,3 +386,130 @@ class TestAdminSettingsRoundTrip:
         assert data["global_llm_provider"] == "gemini"
         assert data["global_llm_model"] == "gemini-1.5-pro"
 
+
+# ---------------------------------------------------------------------------
+# Admin: server logs
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def cfg_with_log(tmp_path):
+    """Config with log_file pointing to a temp path (file may or may not exist)."""
+    from cryptography.fernet import Fernet
+
+    return Config(
+        discord_token="test-token",
+        encryption_master_key=Fernet.generate_key().decode(),
+        session_secret="test-secret-key-at-least-32-chars!!",
+        discord_client_id="test-client-id",
+        discord_client_secret="test-client-secret",
+        discord_redirect_uri="http://localhost:8000/auth/callback",
+        bot_admin_ids=["111111111111111111"],
+        db_path=str(tmp_path / "test.db"),
+        frontend_url="http://localhost:5173",
+        log_file=str(tmp_path / "bot.log"),
+    )
+
+
+@pytest.fixture
+async def admin_log_client(cfg_with_log):
+    """Admin client whose Config has log_file configured."""
+    from src.db.connection import init_schema, open_db
+
+    app = create_app(cfg_with_log)
+    db = await open_db(cfg_with_log.db_path)
+    await init_schema(db)
+    app.state.cfg = cfg_with_log
+    app.state.db = db
+
+    async def mock_admin():
+        return {"user_id": "111111111111111111", "username": "admin", "is_bot_admin": True}
+
+    app.dependency_overrides[require_auth] = mock_admin
+
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
+            yield c, cfg_with_log
+    finally:
+        await db.close()
+
+
+class TestServerLogs:
+    async def test_unauthenticated_returns_401(self, client):
+        r = await client.get("/api/admin/server-logs")
+        assert r.status_code == 401
+
+    async def test_download_unauthenticated_returns_401(self, client):
+        r = await client.get("/api/admin/server-logs/download")
+        assert r.status_code == 401
+
+    async def test_no_log_file_configured_returns_unavailable(self, admin_client):
+        """When Config.log_file is empty, available=False and log_file is empty string."""
+        r = await admin_client.get("/api/admin/server-logs")
+        assert r.status_code == 200
+        data = r.json()
+        assert data["available"] is False
+        assert data["log_file"] == ""
+        assert data["lines"] == []
+
+    async def test_download_no_log_file_returns_404(self, admin_client):
+        r = await admin_client.get("/api/admin/server-logs/download")
+        assert r.status_code == 404
+
+    async def test_log_file_missing_returns_unavailable_with_filename(self, admin_log_client):
+        client, cfg = admin_log_client
+        r = await client.get("/api/admin/server-logs")
+        assert r.status_code == 200
+        data = r.json()
+        assert data["available"] is False
+        assert data["log_file"] != ""
+
+    async def test_download_missing_file_returns_404(self, admin_log_client):
+        client, cfg = admin_log_client
+        r = await client.get("/api/admin/server-logs/download")
+        assert r.status_code == 404
+
+    async def test_existing_log_file_returns_lines(self, admin_log_client):
+        client, cfg = admin_log_client
+        import pathlib
+        pathlib.Path(cfg.log_file).write_text(
+            "2024-01-01 INFO bot: started\n2024-01-01 INFO bot: ready\n",
+            encoding="utf-8",
+        )
+        r = await client.get("/api/admin/server-logs")
+        assert r.status_code == 200
+        data = r.json()
+        assert data["available"] is True
+        assert len(data["lines"]) == 2
+        assert "started" in data["lines"][0]
+
+    async def test_lines_query_param_limits_results(self, admin_log_client):
+        client, cfg = admin_log_client
+        import pathlib
+        content = "\n".join(f"line{i}" for i in range(50)) + "\n"
+        pathlib.Path(cfg.log_file).write_text(content, encoding="utf-8")
+        r = await client.get("/api/admin/server-logs?lines=5")
+        assert r.status_code == 200
+        data = r.json()
+        assert len(data["lines"]) == 5
+        assert data["lines"][-1] == "line49"
+
+    async def test_download_existing_file_returns_200(self, admin_log_client):
+        client, cfg = admin_log_client
+        import pathlib
+        pathlib.Path(cfg.log_file).write_text("log content\n", encoding="utf-8")
+        r = await client.get("/api/admin/server-logs/download")
+        assert r.status_code == 200
+        assert "text/plain" in r.headers["content-type"]
+
+    async def test_size_bytes_reflects_file_size(self, admin_log_client):
+        client, cfg = admin_log_client
+        import pathlib
+        content = "hello world\n"
+        pathlib.Path(cfg.log_file).write_text(content, encoding="utf-8")
+        r = await client.get("/api/admin/server-logs")
+        data = r.json()
+        assert data["size_bytes"] == len(content.encode("utf-8"))
+
