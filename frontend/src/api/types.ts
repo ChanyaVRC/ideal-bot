@@ -95,3 +95,10 @@ export interface FallbackResponse {
   sort_order: number
   created_at: string
 }
+
+export interface ServerLogResponse {
+  lines: string[]
+  log_file: string
+  available: boolean
+  size_bytes: number
+}

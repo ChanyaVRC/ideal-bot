@@ -35,6 +35,17 @@ def create_app(cfg: Config | None = None) -> FastAPI:
         await init_schema(app.state.db)
         app.state.http_client = httpx.AsyncClient()
         app.state.guild_cache = {}  # {user_id: {"guilds": list, "fetched_at": datetime}}
+        if cfg.log_file:
+            from logging.handlers import RotatingFileHandler
+            _fh = RotatingFileHandler(
+                cfg.log_file,
+                maxBytes=cfg.log_max_bytes,
+                backupCount=cfg.log_backup_count,
+                encoding="utf-8",
+            )
+            _fh.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
+            logging.getLogger().addHandler(_fh)
+            logger.info("File logging enabled: %s", cfg.log_file)
         yield
         await app.state.http_client.aclose()
         await app.state.db.close()

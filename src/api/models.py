@@ -117,3 +117,10 @@ class FallbackResponse(BaseModel):
 
 class FallbackResponseCreate(BaseModel):
     response: str
+
+
+class ServerLogResponse(BaseModel):
+    lines: list[str]
+    log_file: str
+    available: bool
+    size_bytes: int = 0

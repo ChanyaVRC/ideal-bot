@@ -8,6 +8,7 @@ import type {
   GuildSettings,
   GuildSettingsUpdate,
   ManagedGuild,
+  ServerLogResponse,
   UserInfo,
   Word,
 } from './types'
@@ -56,4 +57,8 @@ export const adminApi = {
   reloadGenerator: () => api.post('/api/admin/reload-generator'),
   getLogs: (params?: { limit?: number; offset?: number; guild_id?: string }) =>
     api.get<ConversationLogEntry[]>('/api/admin/logs', { params }),
+  getServerLogs: (lines?: number) =>
+    api.get<ServerLogResponse>('/api/admin/server-logs', { params: { lines } }),
+  downloadServerLogs: () =>
+    api.get('/api/admin/server-logs/download', { responseType: 'blob' }),
 }

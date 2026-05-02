@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import asyncio
+import os
 from typing import Annotated
 
 import aiosqlite
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import FileResponse
 
 from src.config import Config
 from src.db import bot_settings as bot_settings_db
@@ -20,6 +23,7 @@ from src.api.models import (
     FallbackResponseCreate,
     GuildAdminInfo,
     GuildToggle,
+    ServerLogResponse,
 )
 from src.ai.local import DEFAULT_LOCAL_SYSTEM_PROMPT
 
@@ -231,3 +235,60 @@ async def request_reload_generator(db: Annotated[aiosqlite.Connection, Depends(g
     """Set a flag in bot_settings that the bot polls to trigger generator reload."""
     await bot_settings_db.set_value(db, "reload_generator_requested", "1")
     return {"ok": True}
+
+
+def _tail_lines(path: str, n: int) -> list[str]:
+    """Read the last n lines from a file efficiently without loading the whole file."""
+    with open(path, "rb") as f:
+        f.seek(0, 2)
+        size = f.tell()
+        if size == 0:
+            return []
+        buf = bytearray()
+        chunk = 8192
+        lines_found = 0
+        pos = size
+        while pos > 0 and lines_found < n + 1:
+            read_size = min(chunk, pos)
+            pos -= read_size
+            f.seek(pos)
+            data = f.read(read_size)
+            buf = bytearray(data) + buf
+            lines_found = buf.count(b"\n")
+        text = buf.decode("utf-8", errors="replace")
+        return text.splitlines()[-n:]
+
+
+@router.get("/server-logs", response_model=ServerLogResponse)
+async def get_server_logs(
+    cfg: Annotated[Config, Depends(get_cfg)],
+    lines: int = Query(default=200, ge=1, le=5000),
+):
+    if not cfg.log_file:
+        return ServerLogResponse(lines=[], log_file="", available=False)
+    if not os.path.exists(cfg.log_file):
+        return ServerLogResponse(lines=[], log_file=cfg.log_file, available=False)
+
+    size = os.path.getsize(cfg.log_file)
+    recent = await asyncio.get_running_loop().run_in_executor(
+        None, _tail_lines, cfg.log_file, lines
+    )
+    return ServerLogResponse(
+        lines=recent,
+        log_file=os.path.basename(cfg.log_file),
+        available=True,
+        size_bytes=size,
+    )
+
+
+@router.get("/server-logs/download")
+async def download_server_logs(cfg: Annotated[Config, Depends(get_cfg)]):
+    if not cfg.log_file:
+        raise HTTPException(status_code=404, detail="log_file is not configured")
+    if not os.path.exists(cfg.log_file):
+        raise HTTPException(status_code=404, detail="Log file not found")
+    return FileResponse(
+        cfg.log_file,
+        media_type="text/plain; charset=utf-8",
+        filename=os.path.basename(cfg.log_file),
+    )
