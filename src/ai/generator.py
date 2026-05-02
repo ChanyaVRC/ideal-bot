@@ -174,7 +174,10 @@ async def _resolve_llm(
         try:
             return decrypt(config.encryption_master_key, settings.llm_api_key), settings.llm_provider, settings.llm_model
         except Exception:
-            pass
+            logger.debug(
+                "Failed to decrypt guild-level LLM API key for guild %s; falling back",
+                settings.guild_id,
+            )
 
     global_key_enc = await bot_settings_db.get_value(db, "global_llm_api_key")
     global_provider = await bot_settings_db.get_value(db, "global_llm_provider") or "openai"
@@ -183,7 +186,7 @@ async def _resolve_llm(
         try:
             return decrypt(config.encryption_master_key, global_key_enc), global_provider, global_model
         except Exception:
-            pass
+            logger.debug("Failed to decrypt global LLM API key; falling back to local AI")
 
     return None, settings.llm_provider, settings.llm_model
 
