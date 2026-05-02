@@ -126,7 +126,7 @@ async def callback(
     # This avoids relying on cfg.frontend_url which may point to the Vite dev server.
     base = str(request.base_url).rstrip("/")
     guild_id = request.query_params.get("guild")
-    if guild_id:
+    if guild_id and guild_id.isdigit():
         return RedirectResponse(url=f"{base}/guild/{guild_id}")
     return RedirectResponse(url=f"{base}/guilds")
 
