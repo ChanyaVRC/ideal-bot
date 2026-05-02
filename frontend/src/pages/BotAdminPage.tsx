@@ -591,12 +591,26 @@ function ServerLogViewer() {
         <p className="text-sm text-muted-foreground">読み込み中…</p>
       ) : !data?.available ? (
         <div className="rounded-md border border-dashed p-6 text-center space-y-1">
-          <p className="text-sm font-medium">ログファイルが設定されていません</p>
-          <p className="text-xs text-muted-foreground">
-            <code className="font-mono">config.json</code> に{' '}
-            <code className="font-mono">"log_file": "ideal_bot.log"</code>{' '}
-            を追加するとファイルログが有効になります。
-          </p>
+          {data?.log_file ? (
+            <>
+              <p className="text-sm font-medium">ログファイルが見つかりません</p>
+              <p className="text-xs text-muted-foreground">
+                設定されたファイル{' '}
+                <code className="font-mono">{data.log_file}</code>{' '}
+                が存在しないか、読み取り権限がありません。
+                ログローテーション直後は一時的にこの状態になることがあります。
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-sm font-medium">ログファイルが設定されていません</p>
+              <p className="text-xs text-muted-foreground">
+                <code className="font-mono">config.json</code> に{' '}
+                <code className="font-mono">"log_file": "ideal_bot.log"</code>{' '}
+                を追加するとファイルログが有効になります。
+              </p>
+            </>
+          )}
         </div>
       ) : data.lines.length === 0 ? (
         <p className="text-sm text-muted-foreground">ログがありません。</p>
