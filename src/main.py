@@ -150,6 +150,8 @@ async def main() -> None:
 
     config = load_config()
     logging.getLogger().setLevel(_resolve_log_level(config.log_level))
+    from src.logging_setup import setup_file_logging
+    setup_file_logging(config)
     logger.info("Configuration loaded.")
     logger.info("Log level: %s", config.log_level.upper())
     logger.debug(

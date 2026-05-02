@@ -35,6 +35,8 @@ def create_app(cfg: Config | None = None) -> FastAPI:
         await init_schema(app.state.db)
         app.state.http_client = httpx.AsyncClient()
         app.state.guild_cache = {}  # {user_id: {"guilds": list, "fetched_at": datetime}}
+        from src.logging_setup import setup_file_logging
+        setup_file_logging(cfg)
         yield
         await app.state.http_client.aclose()
         await app.state.db.close()

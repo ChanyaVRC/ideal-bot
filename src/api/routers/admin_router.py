@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import asyncio
+import os
 from typing import Annotated
 
 import aiosqlite
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import FileResponse
 
 from src.config import Config
 from src.db import bot_settings as bot_settings_db
@@ -20,6 +23,7 @@ from src.api.models import (
     FallbackResponseCreate,
     GuildAdminInfo,
     GuildToggle,
+    ServerLogResponse,
 )
 from src.ai.local import DEFAULT_LOCAL_SYSTEM_PROMPT
 
@@ -231,3 +235,93 @@ async def request_reload_generator(db: Annotated[aiosqlite.Connection, Depends(g
     """Set a flag in bot_settings that the bot polls to trigger generator reload."""
     await bot_settings_db.set_value(db, "reload_generator_requested", "1")
     return {"ok": True}
+
+
+_TAIL_MAX_BYTES = 50 * 1024 * 1024  # 50 MB — safety cap against enormous log files
+_DOWNLOAD_MAX_BYTES = 500 * 1024 * 1024  # 500 MB
+
+
+def _tail_lines(path: str, n: int) -> list[str]:
+    """Read the last n lines from a file efficiently without loading the whole file.
+
+    Reads at most _TAIL_MAX_BYTES from the end of the file so that requesting
+    a large number of lines on a huge log does not exhaust server memory.
+    """
+    try:
+        with open(path, "rb") as f:
+            f.seek(0, 2)
+            size = f.tell()
+            if size == 0:
+                return []
+            buf = bytearray()
+            chunk = 8192
+            lines_found = 0
+            bytes_read = 0
+            pos = size
+            while pos > 0 and lines_found < n + 1 and bytes_read < _TAIL_MAX_BYTES:
+                read_size = min(chunk, pos, _TAIL_MAX_BYTES - bytes_read)
+                pos -= read_size
+                f.seek(pos)
+                data = f.read(read_size)
+                buf = bytearray(data) + buf
+                lines_found = buf.count(b"\n")
+                bytes_read += read_size
+            text = buf.decode("utf-8", errors="replace")
+            return text.splitlines()[-n:]
+    except (FileNotFoundError, PermissionError, OSError):
+        return []
+
+
+def _resolve_log_path(log_file: str) -> "Path":
+    """Resolve and validate the log file path to prevent path traversal."""
+    from pathlib import Path
+    return Path(log_file).resolve()
+
+
+@router.get("/server-logs", response_model=ServerLogResponse)
+async def get_server_logs(
+    cfg: Annotated[Config, Depends(get_cfg)],
+    lines: int = Query(default=200, ge=1, le=5000),
+):
+    if not cfg.log_file:
+        return ServerLogResponse(lines=[], log_file="", available=False)
+
+    log_path = _resolve_log_path(cfg.log_file)
+    try:
+        size = log_path.stat().st_size
+    except (FileNotFoundError, PermissionError, OSError):
+        return ServerLogResponse(lines=[], log_file=cfg.log_file, available=False)
+
+    recent = await asyncio.get_running_loop().run_in_executor(
+        None, _tail_lines, str(log_path), lines
+    )
+    return ServerLogResponse(
+        lines=recent,
+        log_file=log_path.name,
+        available=True,
+        size_bytes=size,
+    )
+
+
+@router.get("/server-logs/download")
+async def download_server_logs(cfg: Annotated[Config, Depends(get_cfg)]):
+    if not cfg.log_file:
+        raise HTTPException(status_code=404, detail="log_file is not configured")
+    log_path = _resolve_log_path(cfg.log_file)
+    if not log_path.exists():
+        raise HTTPException(status_code=404, detail="Log file not found")
+    size = log_path.stat().st_size
+    if size > _DOWNLOAD_MAX_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                f"Log file is too large to download directly "
+                f"({size / (1024 * 1024):.1f} MB, limit {_DOWNLOAD_MAX_BYTES // (1024 * 1024)} MB). "
+                "Rotate or truncate the log file first."
+            ),
+        )
+    return FileResponse(
+        str(log_path),
+        media_type="text/plain; charset=utf-8",
+        filename=log_path.name,
+    )
