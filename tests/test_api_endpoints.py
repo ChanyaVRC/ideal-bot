@@ -386,3 +386,77 @@ class TestAdminSettingsRoundTrip:
         assert data["global_llm_provider"] == "gemini"
         assert data["global_llm_model"] == "gemini-1.5-pro"
 
+    async def test_local_system_prompt_roundtrip(self, admin_client):
+        prompt = "テスト用のシステムプロンプトです。"
+        await admin_client.patch("/api/admin/settings", json={"local_system_prompt": prompt})
+        r = await admin_client.get("/api/admin/settings")
+        assert r.json()["local_system_prompt"] == prompt
+
+
+# ---------------------------------------------------------------------------
+# Admin: torch dtype and quantization validation
+# ---------------------------------------------------------------------------
+
+
+class TestAdminDtypeValidation:
+    async def test_invalid_dtype_returns_422(self, admin_client):
+        r = await admin_client.patch(
+            "/api/admin/settings",
+            json={"local_torch_dtype": "totally_invalid"},
+        )
+        assert r.status_code == 422
+
+    async def test_auto_dtype_always_accepted(self, admin_client):
+        r = await admin_client.patch(
+            "/api/admin/settings",
+            json={"local_torch_dtype": "auto"},
+        )
+        assert r.status_code == 200
+
+    async def test_auto_dtype_roundtrip(self, admin_client):
+        await admin_client.patch("/api/admin/settings", json={"local_torch_dtype": "auto"})
+        r = await admin_client.get("/api/admin/settings")
+        assert r.json()["local_torch_dtype"] == "auto"
+
+    async def test_settings_exposes_supported_dtypes_list(self, admin_client):
+        r = await admin_client.get("/api/admin/settings")
+        data = r.json()
+        assert "local_supported_torch_dtypes" in data
+        assert "auto" in data["local_supported_torch_dtypes"]
+
+    async def test_invalid_quantization_returns_422(self, admin_client):
+        r = await admin_client.patch(
+            "/api/admin/settings",
+            json={"local_quantization_mode": "invalid_quant"},
+        )
+        assert r.status_code == 422
+
+    async def test_valid_quantization_modes_accepted(self, admin_client):
+        for mode in ("none", "4bit", "8bit"):
+            r = await admin_client.patch(
+                "/api/admin/settings",
+                json={"local_quantization_mode": mode},
+            )
+            assert r.status_code == 200, f"Expected 200 for mode={mode!r}"
+
+    async def test_quantization_roundtrip(self, admin_client):
+        await admin_client.patch("/api/admin/settings", json={"local_quantization_mode": "none"})
+        r = await admin_client.get("/api/admin/settings")
+        assert r.json()["local_quantization_mode"] == "none"
+
+
+# ---------------------------------------------------------------------------
+# Admin: reload-generator
+# ---------------------------------------------------------------------------
+
+
+class TestReloadGenerator:
+    async def test_reload_generator_returns_ok(self, admin_client):
+        r = await admin_client.post("/api/admin/reload-generator")
+        assert r.status_code == 200
+        assert r.json() == {"ok": True}
+
+    async def test_reload_generator_unauthenticated_returns_401(self, client):
+        r = await client.post("/api/admin/reload-generator")
+        assert r.status_code == 401
+
