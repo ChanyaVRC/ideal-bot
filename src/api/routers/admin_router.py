@@ -247,26 +247,35 @@ def _tail_lines(path: str, n: int) -> list[str]:
     Reads at most _TAIL_MAX_BYTES from the end of the file so that requesting
     a large number of lines on a huge log does not exhaust server memory.
     """
-    with open(path, "rb") as f:
-        f.seek(0, 2)
-        size = f.tell()
-        if size == 0:
-            return []
-        buf = bytearray()
-        chunk = 8192
-        lines_found = 0
-        bytes_read = 0
-        pos = size
-        while pos > 0 and lines_found < n + 1 and bytes_read < _TAIL_MAX_BYTES:
-            read_size = min(chunk, pos, _TAIL_MAX_BYTES - bytes_read)
-            pos -= read_size
-            f.seek(pos)
-            data = f.read(read_size)
-            buf = bytearray(data) + buf
-            lines_found = buf.count(b"\n")
-            bytes_read += read_size
-        text = buf.decode("utf-8", errors="replace")
-        return text.splitlines()[-n:]
+    try:
+        with open(path, "rb") as f:
+            f.seek(0, 2)
+            size = f.tell()
+            if size == 0:
+                return []
+            buf = bytearray()
+            chunk = 8192
+            lines_found = 0
+            bytes_read = 0
+            pos = size
+            while pos > 0 and lines_found < n + 1 and bytes_read < _TAIL_MAX_BYTES:
+                read_size = min(chunk, pos, _TAIL_MAX_BYTES - bytes_read)
+                pos -= read_size
+                f.seek(pos)
+                data = f.read(read_size)
+                buf = bytearray(data) + buf
+                lines_found = buf.count(b"\n")
+                bytes_read += read_size
+            text = buf.decode("utf-8", errors="replace")
+            return text.splitlines()[-n:]
+    except (FileNotFoundError, PermissionError, OSError):
+        return []
+
+
+def _resolve_log_path(log_file: str) -> "Path":
+    """Resolve and validate the log file path to prevent path traversal."""
+    from pathlib import Path
+    return Path(log_file).resolve()
 
 
 @router.get("/server-logs", response_model=ServerLogResponse)
@@ -276,16 +285,19 @@ async def get_server_logs(
 ):
     if not cfg.log_file:
         return ServerLogResponse(lines=[], log_file="", available=False)
-    if not os.path.exists(cfg.log_file):
+
+    log_path = _resolve_log_path(cfg.log_file)
+    try:
+        size = log_path.stat().st_size
+    except (FileNotFoundError, PermissionError, OSError):
         return ServerLogResponse(lines=[], log_file=cfg.log_file, available=False)
 
-    size = os.path.getsize(cfg.log_file)
     recent = await asyncio.get_running_loop().run_in_executor(
-        None, _tail_lines, cfg.log_file, lines
+        None, _tail_lines, str(log_path), lines
     )
     return ServerLogResponse(
         lines=recent,
-        log_file=os.path.basename(cfg.log_file),
+        log_file=log_path.name,
         available=True,
         size_bytes=size,
     )
@@ -295,9 +307,10 @@ async def get_server_logs(
 async def download_server_logs(cfg: Annotated[Config, Depends(get_cfg)]):
     if not cfg.log_file:
         raise HTTPException(status_code=404, detail="log_file is not configured")
-    if not os.path.exists(cfg.log_file):
+    log_path = _resolve_log_path(cfg.log_file)
+    if not log_path.exists():
         raise HTTPException(status_code=404, detail="Log file not found")
-    size = os.path.getsize(cfg.log_file)
+    size = log_path.stat().st_size
     if size > _DOWNLOAD_MAX_BYTES:
         raise HTTPException(
             status_code=413,
@@ -308,7 +321,7 @@ async def download_server_logs(cfg: Annotated[Config, Depends(get_cfg)]):
             ),
         )
     return FileResponse(
-        cfg.log_file,
+        str(log_path),
         media_type="text/plain; charset=utf-8",
-        filename=os.path.basename(cfg.log_file),
+        filename=log_path.name,
     )
