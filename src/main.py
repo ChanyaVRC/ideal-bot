@@ -149,11 +149,7 @@ async def main() -> None:
     logger.debug("Loading configuration from config.json")
 
     config = load_config()
-    logging.basicConfig(
-        level=_resolve_log_level(config.log_level),
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-        force=True,
-    )
+    logging.getLogger().setLevel(_resolve_log_level(config.log_level))
     logger.info("Configuration loaded.")
     logger.info("Log level: %s", config.log_level.upper())
     logger.debug(
