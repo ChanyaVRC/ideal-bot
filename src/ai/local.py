@@ -179,7 +179,7 @@ class LocalAI:
         """Clear and immediately reload the generator in a background thread."""
         self.reload_generator()
         if self._generation_model_name:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             await loop.run_in_executor(None, self._ensure_generator)
             logger.info("Generator reloaded successfully.")
 
@@ -191,12 +191,12 @@ class LocalAI:
         return self._ensure_model().encode(text, normalize_embeddings=True)
 
     async def encode_async(self, text: str) -> np.ndarray:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, self.encode, text)
 
     async def preload(self) -> None:
         logger.info("Starting background AI model loading...")
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         logger.debug("Preload step 1/2: loading sentence embedding model")
         await loop.run_in_executor(None, self._ensure_model)
         if self._generation_model_name:
@@ -346,7 +346,7 @@ class LocalAI:
         system_prompt_tpl: str | None = None,
         context_history: list[tuple[bool, str]] | None = None,
     ) -> tuple[str, str]:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         fn = partial(
             self.generate_sentence, words,
             bot_name=bot_name,
@@ -396,6 +396,6 @@ class LocalAI:
         word_embeddings: list[tuple[str, bytes | None]],
         top_k: int = 5,
     ) -> list[str]:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         fn = partial(self.select_top_words, context_texts, word_embeddings, top_k)
         return await loop.run_in_executor(None, fn)
