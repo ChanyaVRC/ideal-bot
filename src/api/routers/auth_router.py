@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import secrets
-from datetime import datetime
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
@@ -111,7 +111,7 @@ async def callback(
     # Warm the in-memory guild cache so the first /guilds call is instant
     request.app.state.guild_cache[discord_user["id"]] = {
         "guilds": all_guilds,
-        "fetched_at": datetime.utcnow(),
+        "fetched_at": datetime.now(UTC),
     }
     request.session["bot_name"] = bot_user.get("username")
     request.session["bot_avatar"] = bot_user.get("avatar")
@@ -181,7 +181,7 @@ async def managed_guilds(request: Request, _user: dict = Depends(require_auth)):
 
     # Use in-memory cache for user guild list (avoids per-request Discord API call)
     cached = request.app.state.guild_cache.get(user_id)
-    if cached and (datetime.utcnow() - cached["fetched_at"]).total_seconds() < ttl:
+    if cached and (datetime.now(UTC) - cached["fetched_at"]).total_seconds() < ttl:
         all_guilds = cached["guilds"]
     else:
         try:
@@ -190,7 +190,7 @@ async def managed_guilds(request: Request, _user: dict = Depends(require_auth)):
             raise HTTPException(status_code=502, detail="Discord API error") from exc
         request.app.state.guild_cache[user_id] = {
             "guilds": all_guilds,
-            "fetched_at": datetime.utcnow(),
+            "fetched_at": datetime.now(UTC),
         }
 
     filtered = filter_bot_joined_guilds(all_guilds, bot_guild_ids)
