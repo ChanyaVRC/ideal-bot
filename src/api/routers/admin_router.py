@@ -237,8 +237,16 @@ async def request_reload_generator(db: Annotated[aiosqlite.Connection, Depends(g
     return {"ok": True}
 
 
+_TAIL_MAX_BYTES = 50 * 1024 * 1024  # 50 MB — safety cap against enormous log files
+_DOWNLOAD_MAX_BYTES = 500 * 1024 * 1024  # 500 MB
+
+
 def _tail_lines(path: str, n: int) -> list[str]:
-    """Read the last n lines from a file efficiently without loading the whole file."""
+    """Read the last n lines from a file efficiently without loading the whole file.
+
+    Reads at most _TAIL_MAX_BYTES from the end of the file so that requesting
+    a large number of lines on a huge log does not exhaust server memory.
+    """
     with open(path, "rb") as f:
         f.seek(0, 2)
         size = f.tell()
@@ -247,14 +255,16 @@ def _tail_lines(path: str, n: int) -> list[str]:
         buf = bytearray()
         chunk = 8192
         lines_found = 0
+        bytes_read = 0
         pos = size
-        while pos > 0 and lines_found < n + 1:
-            read_size = min(chunk, pos)
+        while pos > 0 and lines_found < n + 1 and bytes_read < _TAIL_MAX_BYTES:
+            read_size = min(chunk, pos, _TAIL_MAX_BYTES - bytes_read)
             pos -= read_size
             f.seek(pos)
             data = f.read(read_size)
             buf = bytearray(data) + buf
             lines_found = buf.count(b"\n")
+            bytes_read += read_size
         text = buf.decode("utf-8", errors="replace")
         return text.splitlines()[-n:]
 
@@ -287,6 +297,16 @@ async def download_server_logs(cfg: Annotated[Config, Depends(get_cfg)]):
         raise HTTPException(status_code=404, detail="log_file is not configured")
     if not os.path.exists(cfg.log_file):
         raise HTTPException(status_code=404, detail="Log file not found")
+    size = os.path.getsize(cfg.log_file)
+    if size > _DOWNLOAD_MAX_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                f"Log file is too large to download directly "
+                f"({size / (1024 * 1024):.1f} MB, limit {_DOWNLOAD_MAX_BYTES // (1024 * 1024)} MB). "
+                "Rotate or truncate the log file first."
+            ),
+        )
     return FileResponse(
         cfg.log_file,
         media_type="text/plain; charset=utf-8",
