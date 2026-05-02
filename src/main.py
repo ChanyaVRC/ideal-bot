@@ -150,6 +150,17 @@ async def main() -> None:
 
     config = load_config()
     logging.getLogger().setLevel(_resolve_log_level(config.log_level))
+    if config.log_file:
+        from logging.handlers import RotatingFileHandler
+        _fh = RotatingFileHandler(
+            config.log_file,
+            maxBytes=config.log_max_bytes,
+            backupCount=config.log_backup_count,
+            encoding="utf-8",
+        )
+        _fh.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
+        logging.getLogger().addHandler(_fh)
+        logger.info("File logging enabled: %s", config.log_file)
     logger.info("Configuration loaded.")
     logger.info("Log level: %s", config.log_level.upper())
     logger.debug(

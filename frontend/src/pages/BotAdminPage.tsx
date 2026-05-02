@@ -1,12 +1,13 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ChevronLeft } from 'lucide-react'
+import { ChevronLeft, Download, RefreshCw } from 'lucide-react'
 import { adminApi } from '@/api/client'
 import type {
   AdminSettings,
   ConversationLogEntry,
   FallbackResponse,
   GuildAdminInfo,
+  ServerLogResponse,
 } from '@/api/types'
 import Layout from '@/components/Layout'
 import { Button } from '@/components/ui/button'
@@ -459,6 +460,166 @@ function FallbackResponsesEditor() {
   )
 }
 
+const LOG_LEVEL_CLASS: Record<string, string> = {
+  ERROR: 'text-red-500',
+  WARNING: 'text-yellow-500',
+  WARN: 'text-yellow-500',
+  DEBUG: 'text-muted-foreground',
+}
+
+function colorizeLogLine(line: string): { text: string; className: string } {
+  const match = line.match(/\[(ERROR|WARNING|WARN|INFO|DEBUG)\]/)
+  if (match) {
+    return { text: line, className: LOG_LEVEL_CLASS[match[1]] ?? '' }
+  }
+  return { text: line, className: '' }
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function ServerLogViewer() {
+  const [data, setData] = useState<ServerLogResponse | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [autoRefresh, setAutoRefresh] = useState(false)
+  const [lines, setLines] = useState(200)
+  const [downloading, setDownloading] = useState(false)
+  const bottomRef = useRef<HTMLDivElement>(null)
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const fetch = useCallback(() => {
+    adminApi
+      .getServerLogs(lines)
+      .then((r) => setData(r.data))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [lines])
+
+  useEffect(() => {
+    setLoading(true)
+    fetch()
+  }, [fetch])
+
+  useEffect(() => {
+    if (autoRefresh) {
+      intervalRef.current = setInterval(fetch, 5000)
+    } else {
+      if (intervalRef.current) clearInterval(intervalRef.current)
+    }
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current)
+    }
+  }, [autoRefresh, fetch])
+
+  useEffect(() => {
+    if (data && autoRefresh) {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [data, autoRefresh])
+
+  const handleDownload = async () => {
+    setDownloading(true)
+    try {
+      const r = await adminApi.downloadServerLogs()
+      const url = URL.createObjectURL(r.data as Blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = data?.log_file || 'server.log'
+      a.click()
+      URL.revokeObjectURL(url)
+    } finally {
+      setDownloading(false)
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="space-y-1">
+          <Label htmlFor="log-lines">表示行数</Label>
+          <Select
+            value={String(lines)}
+            onValueChange={(v) => setLines(Number(v))}
+          >
+            <SelectTrigger id="log-lines" className="w-28">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {[100, 200, 500, 1000, 2000, 5000].map((n) => (
+                <SelectItem key={n} value={String(n)}>{n} 行</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <Button variant="outline" onClick={fetch} disabled={loading}>
+          <RefreshCw className="h-4 w-4 mr-1" />
+          更新
+        </Button>
+
+        <div className="flex items-center gap-2">
+          <Switch
+            id="auto-refresh"
+            checked={autoRefresh}
+            onCheckedChange={setAutoRefresh}
+          />
+          <Label htmlFor="auto-refresh" className="cursor-pointer">自動更新（5秒）</Label>
+        </div>
+
+        <Button
+          variant="outline"
+          onClick={handleDownload}
+          disabled={!data?.available || downloading}
+        >
+          <Download className="h-4 w-4 mr-1" />
+          {downloading ? 'ダウンロード中…' : 'ダウンロード'}
+        </Button>
+      </div>
+
+      {data && data.available && (
+        <p className="text-xs text-muted-foreground">
+          ファイル: <code className="font-mono">{data.log_file}</code>
+          　サイズ: {formatBytes(data.size_bytes)}
+          　最新 {data.lines.length} 行を表示
+        </p>
+      )}
+
+      {loading ? (
+        <p className="text-sm text-muted-foreground">読み込み中…</p>
+      ) : !data?.available ? (
+        <div className="rounded-md border border-dashed p-6 text-center space-y-1">
+          <p className="text-sm font-medium">ログファイルが設定されていません</p>
+          <p className="text-xs text-muted-foreground">
+            <code className="font-mono">config.json</code> に{' '}
+            <code className="font-mono">"log_file": "ideal_bot.log"</code>{' '}
+            を追加するとファイルログが有効になります。
+          </p>
+        </div>
+      ) : data.lines.length === 0 ? (
+        <p className="text-sm text-muted-foreground">ログがありません。</p>
+      ) : (
+        <div className="rounded-md border bg-black overflow-auto max-h-[600px]">
+          <pre className="p-3 text-xs font-mono leading-5 whitespace-pre-wrap break-all">
+            {data.lines.map((line, i) => {
+              const { text, className } = colorizeLogLine(line)
+              return (
+                <span key={i} className={className || 'text-gray-200'}>
+                  {text}
+                  {'\n'}
+                </span>
+              )
+            })}
+            <div ref={bottomRef} />
+          </pre>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function BotAdminPage() {
   const navigate = useNavigate()
 
@@ -480,6 +641,7 @@ export default function BotAdminPage() {
             <TabsTrigger value="fallback">フォールバック文言</TabsTrigger>
             <TabsTrigger value="guilds">ギルド一覧</TabsTrigger>
             <TabsTrigger value="logs">発言ログ</TabsTrigger>
+            <TabsTrigger value="server-logs">サーバーログ</TabsTrigger>
           </TabsList>
 
           <TabsContent value="global">
@@ -523,6 +685,18 @@ export default function BotAdminPage() {
               <Separator />
               <CardContent className="pt-4">
                 <ConversationLogs />
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="server-logs">
+            <Card className="mt-4">
+              <CardHeader>
+                <CardTitle className="text-lg">サーバーログ</CardTitle>
+              </CardHeader>
+              <Separator />
+              <CardContent className="pt-4">
+                <ServerLogViewer />
               </CardContent>
             </Card>
           </TabsContent>

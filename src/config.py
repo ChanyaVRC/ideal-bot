@@ -88,6 +88,10 @@ class Config:
     web_host: str = "0.0.0.0"
     web_port: int = 8000
     frontend_url: str = ""  # 空の場合は web_url から導出
+    # ログファイル設定（空文字の場合はファイル出力なし）
+    log_file: str = ""
+    log_max_bytes: int = 10 * 1024 * 1024  # 10 MB
+    log_backup_count: int = 3
 
 
 def _derive_defaults(cfg_data: dict, web_url: str) -> dict:
