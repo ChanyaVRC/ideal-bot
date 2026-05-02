@@ -20,6 +20,26 @@ DEFAULT_LOCAL_SYSTEM_PROMPT = (
     "返答は日本語で、文字数は{target_length}程度にしてください。"
 )
 
+try:
+    import torch as _torch
+
+    _DTYPE_MAP: dict = {
+        "auto": "auto",
+        "bfloat16": _torch.bfloat16,
+        "float16": _torch.float16,
+        "float32": _torch.float32,
+        "float64": _torch.float64,
+        # Shell dtypes are available only on newer torch builds.
+        "float8_e4m3fn": getattr(_torch, "float8_e4m3fn", None),
+        "float8_e5m2": getattr(_torch, "float8_e5m2", None),
+        "float8_e4m3fnuz": getattr(_torch, "float8_e4m3fnuz", None),
+        "float8_e5m2fnuz": getattr(_torch, "float8_e5m2fnuz", None),
+        "float8_e8m0fnu": getattr(_torch, "float8_e8m0fnu", None),
+        "float4_e2m1fn_x2": getattr(_torch, "float4_e2m1fn_x2", None),
+    }
+except Exception:
+    _DTYPE_MAP = {}
+
 
 class LocalAI:
     def __init__(self, model_name: str, generation_model: str = "", cpu_only_mode: bool = False) -> None:
@@ -65,20 +85,6 @@ class LocalAI:
                     logger.info("Loading AI text generation model...")
                     logger.debug("Generation model: %s", self._generation_model_name)
                     logger.debug("Text-generation pipeline device mode: %s", "cpu" if self._cpu_only_mode else "auto")
-                    _DTYPE_MAP = {
-                        "auto": "auto",
-                        "bfloat16": torch.bfloat16,
-                        "float16": torch.float16,
-                        "float32": torch.float32,
-                        "float64": torch.float64,
-                        # Shell dtypes are available only on newer torch builds.
-                        "float8_e4m3fn": getattr(torch, "float8_e4m3fn", None),
-                        "float8_e5m2": getattr(torch, "float8_e5m2", None),
-                        "float8_e4m3fnuz": getattr(torch, "float8_e4m3fnuz", None),
-                        "float8_e5m2fnuz": getattr(torch, "float8_e5m2fnuz", None),
-                        "float8_e8m0fnu": getattr(torch, "float8_e8m0fnu", None),
-                        "float4_e2m1fn_x2": getattr(torch, "float4_e2m1fn_x2", None),
-                    }
                     resolved_dtype = _DTYPE_MAP.get(self._torch_dtype)
                     if resolved_dtype is None:
                         logger.warning(
