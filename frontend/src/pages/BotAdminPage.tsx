@@ -460,6 +460,10 @@ function FallbackResponsesEditor() {
   )
 }
 
+// ---------------------------------------------------------------------------
+// Utilities
+// ---------------------------------------------------------------------------
+
 const LOG_LEVEL_CLASS: Record<string, string> = {
   ERROR: 'text-red-500',
   WARNING: 'text-yellow-500',
@@ -481,16 +485,15 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-function ServerLogViewer() {
+// ---------------------------------------------------------------------------
+// Hooks
+// ---------------------------------------------------------------------------
+
+function useServerLogs(lines: number) {
   const [data, setData] = useState<ServerLogResponse | null>(null)
   const [loading, setLoading] = useState(true)
-  const [autoRefresh, setAutoRefresh] = useState(false)
-  const [lines, setLines] = useState(200)
-  const [downloading, setDownloading] = useState(false)
-  const bottomRef = useRef<HTMLDivElement>(null)
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const fetch = useCallback(() => {
+  const loadLogs = useCallback(() => {
     adminApi
       .getServerLogs(lines)
       .then((r) => setData(r.data))
@@ -500,25 +503,157 @@ function ServerLogViewer() {
 
   useEffect(() => {
     setLoading(true)
-    fetch()
-  }, [fetch])
+    loadLogs()
+  }, [loadLogs])
+
+  return { data, loading, loadLogs }
+}
+
+function useAutoRefresh(callback: () => void, enabled: boolean, intervalMs = 5000) {
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
-    if (autoRefresh) {
-      intervalRef.current = setInterval(fetch, 5000)
+    if (enabled) {
+      intervalRef.current = setInterval(callback, intervalMs)
     } else {
       if (intervalRef.current) clearInterval(intervalRef.current)
     }
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current)
     }
-  }, [autoRefresh, fetch])
+  }, [enabled, callback, intervalMs])
+}
+
+// ---------------------------------------------------------------------------
+// Sub-components for ServerLogViewer
+// ---------------------------------------------------------------------------
+
+interface LogToolbarProps {
+  lines: number
+  onLinesChange: (n: number) => void
+  onRefresh: () => void
+  loading: boolean
+  autoRefresh: boolean
+  onAutoRefreshChange: (v: boolean) => void
+  onDownload: () => void
+  downloading: boolean
+  downloadDisabled: boolean
+}
+
+function LogToolbar({
+  lines,
+  onLinesChange,
+  onRefresh,
+  loading,
+  autoRefresh,
+  onAutoRefreshChange,
+  onDownload,
+  downloading,
+  downloadDisabled,
+}: LogToolbarProps) {
+  return (
+    <div className="flex flex-wrap items-end gap-3">
+      <div className="space-y-1">
+        <Label htmlFor="log-lines">表示行数</Label>
+        <Select value={String(lines)} onValueChange={(v) => onLinesChange(Number(v))}>
+          <SelectTrigger id="log-lines" className="w-28">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {[100, 200, 500, 1000, 2000, 5000].map((n) => (
+              <SelectItem key={n} value={String(n)}>{n} 行</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <Button variant="outline" onClick={onRefresh} disabled={loading}>
+        <RefreshCw className="h-4 w-4 mr-1" />
+        更新
+      </Button>
+
+      <div className="flex items-center gap-2">
+        <Switch id="auto-refresh" checked={autoRefresh} onCheckedChange={onAutoRefreshChange} />
+        <Label htmlFor="auto-refresh" className="cursor-pointer">自動更新（5秒）</Label>
+      </div>
+
+      <Button variant="outline" onClick={onDownload} disabled={downloadDisabled || downloading}>
+        <Download className="h-4 w-4 mr-1" />
+        {downloading ? 'ダウンロード中…' : 'ダウンロード'}
+      </Button>
+    </div>
+  )
+}
+
+function LogUnavailableNotice({ logFile }: { logFile: string }) {
+  if (logFile) {
+    return (
+      <div className="rounded-md border border-dashed p-6 text-center space-y-1">
+        <p className="text-sm font-medium">ログファイルが見つかりません</p>
+        <p className="text-xs text-muted-foreground">
+          設定されたファイル{' '}
+          <code className="font-mono">{logFile}</code>{' '}
+          が存在しないか、読み取り権限がありません。
+          ログローテーション直後は一時的にこの状態になることがあります。
+        </p>
+      </div>
+    )
+  }
+  return (
+    <div className="rounded-md border border-dashed p-6 text-center space-y-1">
+      <p className="text-sm font-medium">ログファイルが設定されていません</p>
+      <p className="text-xs text-muted-foreground">
+        <code className="font-mono">config.json</code> に{' '}
+        <code className="font-mono">"log_file": "ideal_bot.log"</code>{' '}
+        を追加するとファイルログが有効になります。
+      </p>
+    </div>
+  )
+}
+
+interface LogOutputProps {
+  lines: string[]
+  autoScroll: boolean
+}
+
+function LogOutput({ lines, autoScroll }: LogOutputProps) {
+  const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    if (data && autoRefresh) {
+    if (autoScroll) {
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
     }
-  }, [data, autoRefresh])
+  }, [lines, autoScroll])
+
+  return (
+    <div className="rounded-md border bg-black overflow-auto max-h-[600px]">
+      <pre className="p-3 text-xs font-mono leading-5 whitespace-pre-wrap break-all">
+        {lines.map((line, i) => {
+          const { text, className } = colorizeLogLine(line)
+          return (
+            <span key={i} className={className || 'text-gray-200'}>
+              {text}
+              {'\n'}
+            </span>
+          )
+        })}
+        <div ref={bottomRef} />
+      </pre>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// ServerLogViewer
+// ---------------------------------------------------------------------------
+
+function ServerLogViewer() {
+  const [autoRefresh, setAutoRefresh] = useState(false)
+  const [lines, setLines] = useState(200)
+  const [downloading, setDownloading] = useState(false)
+  const { data, loading, loadLogs } = useServerLogs(lines)
+
+  useAutoRefresh(loadLogs, autoRefresh)
 
   const handleDownload = async () => {
     setDownloading(true)
@@ -537,49 +672,19 @@ function ServerLogViewer() {
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="space-y-1">
-          <Label htmlFor="log-lines">表示行数</Label>
-          <Select
-            value={String(lines)}
-            onValueChange={(v) => setLines(Number(v))}
-          >
-            <SelectTrigger id="log-lines" className="w-28">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {[100, 200, 500, 1000, 2000, 5000].map((n) => (
-                <SelectItem key={n} value={String(n)}>{n} 行</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+      <LogToolbar
+        lines={lines}
+        onLinesChange={setLines}
+        onRefresh={loadLogs}
+        loading={loading}
+        autoRefresh={autoRefresh}
+        onAutoRefreshChange={setAutoRefresh}
+        onDownload={handleDownload}
+        downloading={downloading}
+        downloadDisabled={!data?.available}
+      />
 
-        <Button variant="outline" onClick={fetch} disabled={loading}>
-          <RefreshCw className="h-4 w-4 mr-1" />
-          更新
-        </Button>
-
-        <div className="flex items-center gap-2">
-          <Switch
-            id="auto-refresh"
-            checked={autoRefresh}
-            onCheckedChange={setAutoRefresh}
-          />
-          <Label htmlFor="auto-refresh" className="cursor-pointer">自動更新（5秒）</Label>
-        </div>
-
-        <Button
-          variant="outline"
-          onClick={handleDownload}
-          disabled={!data?.available || downloading}
-        >
-          <Download className="h-4 w-4 mr-1" />
-          {downloading ? 'ダウンロード中…' : 'ダウンロード'}
-        </Button>
-      </div>
-
-      {data && data.available && (
+      {data?.available && (
         <p className="text-xs text-muted-foreground">
           ファイル: <code className="font-mono">{data.log_file}</code>
           　サイズ: {formatBytes(data.size_bytes)}
@@ -590,45 +695,11 @@ function ServerLogViewer() {
       {loading ? (
         <p className="text-sm text-muted-foreground">読み込み中…</p>
       ) : !data?.available ? (
-        <div className="rounded-md border border-dashed p-6 text-center space-y-1">
-          {data?.log_file ? (
-            <>
-              <p className="text-sm font-medium">ログファイルが見つかりません</p>
-              <p className="text-xs text-muted-foreground">
-                設定されたファイル{' '}
-                <code className="font-mono">{data.log_file}</code>{' '}
-                が存在しないか、読み取り権限がありません。
-                ログローテーション直後は一時的にこの状態になることがあります。
-              </p>
-            </>
-          ) : (
-            <>
-              <p className="text-sm font-medium">ログファイルが設定されていません</p>
-              <p className="text-xs text-muted-foreground">
-                <code className="font-mono">config.json</code> に{' '}
-                <code className="font-mono">"log_file": "ideal_bot.log"</code>{' '}
-                を追加するとファイルログが有効になります。
-              </p>
-            </>
-          )}
-        </div>
+        <LogUnavailableNotice logFile={data?.log_file ?? ''} />
       ) : data.lines.length === 0 ? (
         <p className="text-sm text-muted-foreground">ログがありません。</p>
       ) : (
-        <div className="rounded-md border bg-black overflow-auto max-h-[600px]">
-          <pre className="p-3 text-xs font-mono leading-5 whitespace-pre-wrap break-all">
-            {data.lines.map((line, i) => {
-              const { text, className } = colorizeLogLine(line)
-              return (
-                <span key={i} className={className || 'text-gray-200'}>
-                  {text}
-                  {'\n'}
-                </span>
-              )
-            })}
-            <div ref={bottomRef} />
-          </pre>
-        </div>
+        <LogOutput lines={data.lines} autoScroll={autoRefresh} />
       )}
     </div>
   )
