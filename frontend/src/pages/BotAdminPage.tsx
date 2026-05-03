@@ -67,6 +67,7 @@ function GlobalSettings() {
         local_system_prompt: settings.local_system_prompt,
         local_torch_dtype: settings.local_torch_dtype,
         local_quantization_mode: settings.local_quantization_mode,
+        vllm_base_url: settings.vllm_base_url,
       })
       setApiKey('')
       setSaved(true)
@@ -99,21 +100,33 @@ function GlobalSettings() {
           onChange={(e) => setSettings({ ...settings, global_llm_model: e.target.value })}
         />
       </div>
-      <div className="space-y-1">
-        <Label htmlFor="global-api-key">
-          グローバル API キー
-          {settings.has_global_api_key && (
-            <span className="ml-2 text-xs text-muted-foreground">（設定済み）</span>
-          )}
-        </Label>
-        <Input
-          id="global-api-key"
-          type="password"
-          placeholder="変更する場合のみ入力"
-          value={apiKey}
-          onChange={(e) => setApiKey(e.target.value)}
-        />
-      </div>
+      {settings.global_llm_provider === 'vllm' ? (
+        <div className="space-y-1">
+          <Label htmlFor="vllm-base-url">vLLM サーバー URL</Label>
+          <Input
+            id="vllm-base-url"
+            placeholder="http://localhost:8000/v1"
+            value={settings.vllm_base_url}
+            onChange={(e) => setSettings({ ...settings, vllm_base_url: e.target.value })}
+          />
+        </div>
+      ) : (
+        <div className="space-y-1">
+          <Label htmlFor="global-api-key">
+            グローバル API キー
+            {settings.has_global_api_key && (
+              <span className="ml-2 text-xs text-muted-foreground">（設定済み）</span>
+            )}
+          </Label>
+          <Input
+            id="global-api-key"
+            type="password"
+            placeholder="変更する場合のみ入力"
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+          />
+        </div>
+      )}
       <div className="space-y-1">
         <Label htmlFor="discord-cache-ttl">Discord キャッシュ TTL（秒）</Label>
         <Input

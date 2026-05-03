@@ -72,6 +72,7 @@ async def get_settings(
     local_dtype = await bot_settings_db.get_value(db, "local_torch_dtype") or "auto"
     supported_dtypes = _get_supported_torch_dtypes()
     local_quant = await bot_settings_db.get_value(db, "local_quantization_mode") or "4bit"
+    vllm_base_url = await bot_settings_db.get_value(db, "vllm_base_url") or ""
     return AdminSettingsResponse(
         has_global_api_key=has_key,
         global_llm_provider=provider,
@@ -82,6 +83,7 @@ async def get_settings(
         local_torch_dtype=local_dtype,
         local_supported_torch_dtypes=supported_dtypes,
         local_quantization_mode=local_quant,
+        vllm_base_url=vllm_base_url,
     )
 
 
@@ -127,6 +129,11 @@ async def update_settings(
         if body.local_quantization_mode not in _VALID_QUANT:
             raise HTTPException(status_code=422, detail=f"local_quantization_mode must be one of {sorted(_VALID_QUANT)}")
         await bot_settings_db.set_value(db, "local_quantization_mode", body.local_quantization_mode)
+    if body.vllm_base_url is not None:
+        if body.vllm_base_url == "":
+            await bot_settings_db.delete_value(db, "vllm_base_url")
+        else:
+            await bot_settings_db.set_value(db, "vllm_base_url", body.vllm_base_url)
     return {"ok": True}
 
 

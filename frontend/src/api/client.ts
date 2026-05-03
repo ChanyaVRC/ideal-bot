@@ -43,6 +43,7 @@ export const adminApi = {
     local_system_prompt?: string
     local_torch_dtype?: string
     local_quantization_mode?: string
+    vllm_base_url?: string
   }) => api.patch('/api/admin/settings', data),
   getGuilds: () => api.get<GuildAdminInfo[]>('/api/admin/guilds'),
   toggleGuild: (guildId: string, botEnabled: boolean) =>

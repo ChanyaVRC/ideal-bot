@@ -121,10 +121,14 @@ async def generate_response_with_context(
     )
     target_range = _length_target_range(latest_user_text)
 
-    if llm_key:
+    vllm_base_url = (
+        await bot_settings_db.get_value(db, "vllm_base_url") if llm_provider == "vllm" else None
+    )
+    if llm_key or (llm_provider == "vllm" and vllm_base_url):
         try:
             response = await _generate_llm(
                 llm_key=llm_key,
+                vllm_base_url=vllm_base_url,
                 provider=llm_provider,
                 model=llm_model,
                 persona=settings.bot_persona or "",
@@ -237,7 +241,8 @@ async def _generate_local(
 
 async def _generate_llm(
     *,
-    llm_key: str,
+    llm_key: str | None,
+    vllm_base_url: str | None = None,
     provider: str,
     model: str,
     persona: str,
@@ -272,10 +277,15 @@ async def _generate_llm(
 
     if provider == "openai":
         from src.ai.llm.openai_provider import OpenAIProvider
-        llm = OpenAIProvider(api_key=llm_key, model=model)
+        llm = OpenAIProvider(api_key=llm_key or "", model=model)
     elif provider == "gemini":
         from src.ai.llm.gemini_provider import GeminiProvider
-        llm = GeminiProvider(api_key=llm_key, model=model)
+        llm = GeminiProvider(api_key=llm_key or "", model=model)
+    elif provider == "vllm":
+        from src.ai.llm.vllm_provider import VLLMProvider
+        if not vllm_base_url:
+            raise ValueError("vllm_base_url is required for vllm provider")
+        llm = VLLMProvider(base_url=vllm_base_url, model=model)
     else:
         raise ValueError(f"Unknown provider: {provider}")
 

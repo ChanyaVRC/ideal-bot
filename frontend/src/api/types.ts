@@ -68,6 +68,7 @@ export interface AdminSettings {
   local_torch_dtype: string
   local_supported_torch_dtypes: string[]
   local_quantization_mode: string
+  vllm_base_url: string
 }
 
 export interface GuildAdminInfo {

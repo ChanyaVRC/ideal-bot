@@ -73,6 +73,7 @@ class AdminSettingsResponse(BaseModel):
     local_torch_dtype: str
     local_supported_torch_dtypes: list[str]
     local_quantization_mode: str
+    vllm_base_url: str
 
 
 class AdminSettingsUpdate(BaseModel):
@@ -83,6 +84,7 @@ class AdminSettingsUpdate(BaseModel):
     local_system_prompt: str | None = None
     local_torch_dtype: str | None = None
     local_quantization_mode: str | None = None
+    vllm_base_url: str | None = None
 
 
 class GuildAdminInfo(BaseModel):
