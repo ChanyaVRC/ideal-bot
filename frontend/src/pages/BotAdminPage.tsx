@@ -177,8 +177,7 @@ function GlobalSettings() {
           </SelectContent>
         </Select>
         <p className="text-xs text-muted-foreground">
-          量子化モードが "none" のときに使用されます。CPU モードでは bfloat16 を推奨します。float8/float4 は
-          shell dtype のため、環境によっては未対応です。
+          量子化モードが "none" のときに使用されます。CPU モードでは bfloat16 を推奨します。float8/float4 はハードウェアが対応している場合のみ表示されます。
         </p>
       </div>
       <div className="space-y-1">

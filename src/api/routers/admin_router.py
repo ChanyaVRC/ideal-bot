@@ -44,6 +44,25 @@ _KNOWN_DTYPES = [
 ]
 
 
+# Standard dtypes that transformers always supports for model loading.
+_STANDARD_DTYPES: frozenset[str] = frozenset({"float16", "bfloat16", "float32", "float64"})
+
+
+def _probe_dtype_usable(torch, dtype_name: str) -> bool:
+    """Return True if casting a float32 tensor to dtype succeeds on the current hardware.
+
+    Mirrors what transformers does internally when loading a model with torch_dtype,
+    so exotic types (float8/float4) are only included when the runtime actually supports them.
+    """
+    try:
+        dtype = getattr(torch, dtype_name)
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        torch.zeros(4, dtype=torch.float32, device=device).to(dtype)
+        return True
+    except Exception:
+        return False
+
+
 def _get_supported_torch_dtypes() -> list[str]:
     supported = ["auto"]
     try:
@@ -54,7 +73,11 @@ def _get_supported_torch_dtypes() -> list[str]:
     for dtype_name in _KNOWN_DTYPES:
         if dtype_name == "auto":
             continue
-        if getattr(torch, dtype_name, None) is not None:
+        if getattr(torch, dtype_name, None) is None:
+            continue
+        if dtype_name in _STANDARD_DTYPES:
+            supported.append(dtype_name)
+        elif _probe_dtype_usable(torch, dtype_name):
             supported.append(dtype_name)
     return supported
 
