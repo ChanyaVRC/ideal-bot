@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { authApi } from '@/api/client'
 import { useAuthStore } from '@/store/authStore'
 import { Button } from './ui/button'
@@ -10,6 +11,10 @@ function userAvatarUrl(userId: string, avatar: string | null): string | null {
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const { user, setUser } = useAuthStore()
+
+  useEffect(() => {
+    document.title = `${user?.bot_name || 'Bot'} 管理画面`
+  }, [user?.bot_name])
 
   const handleLogout = async () => {
     await authApi.logout()

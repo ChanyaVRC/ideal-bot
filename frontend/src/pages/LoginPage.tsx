@@ -9,7 +9,11 @@ export default function LoginPage() {
   useEffect(() => {
     authApi
       .botInfo()
-      .then((r) => setBotName(r.data.name || 'Bot'))
+      .then((r) => {
+        const name = r.data.name || 'Bot'
+        setBotName(name)
+        document.title = `${name} 管理画面`
+      })
       .catch(() => {})
   }, [])
 
