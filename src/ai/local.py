@@ -33,6 +33,7 @@ class LocalAI:
         # Generation config (can be updated at runtime via admin UI)
         self._torch_dtype: str = "auto"
         self._quantization_mode: str = "4bit"
+        self._generation_suspended: bool = False
 
     def _ensure_model(self) -> SentenceTransformer:
         if self._model is None:
@@ -49,8 +50,7 @@ class LocalAI:
         return self._model
 
     def _ensure_generator(self):
-        if not self._generation_model_name:
-            logger.debug("Generation model not configured; skipping generator initialization.")
+        if not self._generation_model_name or self._generation_suspended:
             return None
         if self._generator is None:
             with self._gen_lock:
@@ -174,6 +174,27 @@ class LocalAI:
             self._generator = None
         logger.info("Generator cache cleared; will reload on next use.")
 
+    def release_generator(self) -> None:
+        """Release the generator and suspend local generation (remote LLM is active).
+
+        Safe to call while generation is in progress — in-flight calls hold their own
+        reference to the generator object, so GPU memory is freed once they complete.
+        """
+        with self._gen_lock:
+            already = self._generation_suspended and self._generator is None
+            self._generator = None
+            self._generation_suspended = True
+        if not already:
+            logger.info("Generator released; local generation suspended (remote LLM active).")
+
+    def restore_generator(self) -> None:
+        """Lift the generation suspension so local AI can be used again."""
+        with self._gen_lock:
+            if not self._generation_suspended:
+                return
+            self._generation_suspended = False
+        logger.info("Generator suspension lifted; will reload on next use.")
+
     async def reload_generator_async(self) -> None:
         """Clear and immediately reload the generator in a background thread."""
         self.reload_generator()
@@ -198,14 +219,15 @@ class LocalAI:
         loop = asyncio.get_event_loop()
         logger.debug("Preload step 1/2: loading sentence embedding model")
         await loop.run_in_executor(None, self._ensure_model)
-        if self._generation_model_name:
+        if self._generation_model_name and not self._generation_suspended:
             logger.debug("Preload step 2/2: loading text generation model")
             try:
                 await loop.run_in_executor(None, self._ensure_generator)
             except Exception:
                 logger.exception("Preload step 2/2 failed: generation model could not be initialized")
         else:
-            logger.debug("Preload step 2/2 skipped: generation model is not configured")
+            reason = "suspended (remote LLM active)" if self._generation_suspended else "not configured"
+            logger.debug("Preload step 2/2 skipped: generation model is %s", reason)
         logger.info("Background AI model loading finished.")
 
     def generate_sentence(
