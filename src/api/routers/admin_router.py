@@ -43,6 +43,13 @@ _KNOWN_DTYPES = [
     "float4_e2m1fn_x2",
 ]
 
+# Dtypes that transformers' from_pretrained actually accepts as torch_dtype for
+# standard model loading. float8/float4 variants exist in newer torch builds but
+# are not supported by transformers as a torch_dtype argument.
+_TRANSFORMERS_USABLE_DTYPES: frozenset[str] = frozenset({
+    "auto", "float16", "bfloat16", "float32", "float64",
+})
+
 
 def _get_supported_torch_dtypes() -> list[str]:
     supported = ["auto"]
@@ -53,6 +60,8 @@ def _get_supported_torch_dtypes() -> list[str]:
 
     for dtype_name in _KNOWN_DTYPES:
         if dtype_name == "auto":
+            continue
+        if dtype_name not in _TRANSFORMERS_USABLE_DTYPES:
             continue
         if getattr(torch, dtype_name, None) is not None:
             supported.append(dtype_name)
