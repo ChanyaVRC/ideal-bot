@@ -42,17 +42,16 @@ async def upsert_bot_guild_ids(
     # the table in its previous state rather than a partially-updated one.
     try:
         await db.execute("UPDATE discord_guild_cache SET is_bot_member = 0")
-        for guild_id in guild_ids:
-            await db.execute(
-                """
-                INSERT INTO discord_guild_cache (guild_id, name, icon, is_bot_member, cached_at)
-                VALUES (?, '', NULL, 1, datetime('now'))
-                ON CONFLICT (guild_id) DO UPDATE SET
-                    is_bot_member = 1,
-                    cached_at     = datetime('now')
-                """,
-                (guild_id,),
-            )
+        await db.executemany(
+            """
+            INSERT INTO discord_guild_cache (guild_id, name, icon, is_bot_member, cached_at)
+            VALUES (?, '', NULL, 1, datetime('now'))
+            ON CONFLICT (guild_id) DO UPDATE SET
+                is_bot_member = 1,
+                cached_at     = datetime('now')
+            """,
+            [(guild_id,) for guild_id in guild_ids],
+        )
         await db.execute(
             "INSERT INTO bot_settings (key, value) VALUES (?, datetime('now'))"
             " ON CONFLICT (key) DO UPDATE SET value = datetime('now')",
@@ -69,16 +68,15 @@ async def upsert_guilds(
     guilds: list[dict],
 ) -> None:
     """Cache / refresh name and icon for each guild in the list."""
-    for g in guilds:
-        await db.execute(
-            """
-            INSERT INTO discord_guild_cache (guild_id, name, icon, cached_at)
-            VALUES (?, ?, ?, datetime('now'))
-            ON CONFLICT (guild_id) DO UPDATE SET
-                name      = excluded.name,
-                icon      = excluded.icon,
-                cached_at = excluded.cached_at
-            """,
-            (g["id"], g.get("name", ""), g.get("icon")),
-        )
+    await db.executemany(
+        """
+        INSERT INTO discord_guild_cache (guild_id, name, icon, cached_at)
+        VALUES (?, ?, ?, datetime('now'))
+        ON CONFLICT (guild_id) DO UPDATE SET
+            name      = excluded.name,
+            icon      = excluded.icon,
+            cached_at = excluded.cached_at
+        """,
+        [(g["id"], g.get("name", ""), g.get("icon")) for g in guilds],
+    )
     await db.commit()
