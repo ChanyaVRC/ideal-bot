@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronLeft, Download, RefreshCw } from 'lucide-react'
 import { adminApi } from '@/api/client'
@@ -483,6 +483,24 @@ const LOG_LEVEL_CLASS: Record<string, string> = {
   DEBUG: 'text-muted-foreground',
 }
 
+type LogLevel = 'ERROR' | 'WARNING' | 'INFO' | 'DEBUG' | 'OTHER'
+const ALL_LOG_LEVELS: LogLevel[] = ['ERROR', 'WARNING', 'INFO', 'DEBUG', 'OTHER']
+
+const LEVEL_BADGE_CLASS: Record<LogLevel, string> = {
+  ERROR: 'text-red-500',
+  WARNING: 'text-yellow-600',
+  INFO: 'text-emerald-600',
+  DEBUG: 'text-slate-500',
+  OTHER: 'text-slate-400',
+}
+
+function getLogLineLevel(line: string): LogLevel {
+  const match = line.match(/\[(ERROR|WARNING|WARN|INFO|DEBUG)\]/)
+  if (!match) return 'OTHER'
+  const lvl = match[1]
+  return (lvl === 'WARN' ? 'WARNING' : lvl) as LogLevel
+}
+
 function colorizeLogLine(line: string): { text: string; className: string } {
   const match = line.match(/\[(ERROR|WARNING|WARN|INFO|DEBUG)\]/)
   if (match) {
@@ -504,12 +522,14 @@ function formatBytes(bytes: number): string {
 function useServerLogs(lines: number) {
   const [data, setData] = useState<ServerLogResponse | null>(null)
   const [loading, setLoading] = useState(true)
+  const [fetchError, setFetchError] = useState(false)
 
   const loadLogs = useCallback(() => {
+    setFetchError(false)
     adminApi
       .getServerLogs(lines)
       .then((r) => setData(r.data))
-      .catch(() => {})
+      .catch(() => setFetchError(true))
       .finally(() => setLoading(false))
   }, [lines])
 
@@ -518,7 +538,7 @@ function useServerLogs(lines: number) {
     loadLogs()
   }, [loadLogs])
 
-  return { data, loading, loadLogs }
+  return { data, loading, loadLogs, fetchError }
 }
 
 function useAutoRefresh(callback: () => void, enabled: boolean, intervalMs = 5000) {
@@ -550,6 +570,8 @@ interface LogToolbarProps {
   onDownload: () => void
   downloading: boolean
   downloadDisabled: boolean
+  selectedLevels: Set<LogLevel>
+  onLevelToggle: (level: LogLevel) => void
 }
 
 function LogToolbar({
@@ -562,37 +584,58 @@ function LogToolbar({
   onDownload,
   downloading,
   downloadDisabled,
+  selectedLevels,
+  onLevelToggle,
 }: LogToolbarProps) {
   return (
-    <div className="flex flex-wrap items-end gap-3">
-      <div className="space-y-1">
-        <Label htmlFor="log-lines">表示行数</Label>
-        <Select value={String(lines)} onValueChange={(v) => onLinesChange(Number(v))}>
-          <SelectTrigger id="log-lines" className="w-28">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {[100, 200, 500, 1000, 2000, 5000].map((n) => (
-              <SelectItem key={n} value={String(n)}>{n} 行</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="space-y-1">
+          <Label htmlFor="log-lines">表示行数</Label>
+          <Select value={String(lines)} onValueChange={(v) => onLinesChange(Number(v))}>
+            <SelectTrigger id="log-lines" className="w-28">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {[100, 200, 500, 1000, 2000, 5000].map((n) => (
+                <SelectItem key={n} value={String(n)}>{n} 行</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <Button variant="outline" onClick={onRefresh} disabled={loading}>
+          <RefreshCw className="h-4 w-4 mr-1" />
+          更新
+        </Button>
+
+        <div className="flex items-center gap-2">
+          <Switch id="auto-refresh" checked={autoRefresh} onCheckedChange={onAutoRefreshChange} />
+          <Label htmlFor="auto-refresh" className="cursor-pointer">自動更新（5秒）</Label>
+        </div>
+
+        <Button variant="outline" onClick={onDownload} disabled={downloadDisabled || downloading}>
+          <Download className="h-4 w-4 mr-1" />
+          {downloading ? 'ダウンロード中…' : 'ダウンロード'}
+        </Button>
       </div>
 
-      <Button variant="outline" onClick={onRefresh} disabled={loading}>
-        <RefreshCw className="h-4 w-4 mr-1" />
-        更新
-      </Button>
-
-      <div className="flex items-center gap-2">
-        <Switch id="auto-refresh" checked={autoRefresh} onCheckedChange={onAutoRefreshChange} />
-        <Label htmlFor="auto-refresh" className="cursor-pointer">自動更新（5秒）</Label>
+      <div className="flex flex-wrap items-center gap-4">
+        <span className="text-xs text-muted-foreground shrink-0">ログレベル:</span>
+        {ALL_LOG_LEVELS.map((level) => (
+          <label key={level} className="flex items-center gap-1.5 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={selectedLevels.has(level)}
+              onChange={() => onLevelToggle(level)}
+              className="h-3.5 w-3.5 cursor-pointer"
+            />
+            <span className={`text-xs font-mono font-medium ${LEVEL_BADGE_CLASS[level]}`}>
+              {level}
+            </span>
+          </label>
+        ))}
       </div>
-
-      <Button variant="outline" onClick={onDownload} disabled={downloadDisabled || downloading}>
-        <Download className="h-4 w-4 mr-1" />
-        {downloading ? 'ダウンロード中…' : 'ダウンロード'}
-      </Button>
     </div>
   )
 }
@@ -663,22 +706,52 @@ function ServerLogViewer() {
   const [autoRefresh, setAutoRefresh] = useState(false)
   const [lines, setLines] = useState(200)
   const [downloading, setDownloading] = useState(false)
-  const { data, loading, loadLogs } = useServerLogs(lines)
+  const [selectedLevels, setSelectedLevels] = useState<Set<LogLevel>>(
+    () => new Set(ALL_LOG_LEVELS),
+  )
+  const { data, loading, loadLogs, fetchError } = useServerLogs(lines)
 
   useAutoRefresh(loadLogs, autoRefresh)
 
+  const isFiltered = selectedLevels.size < ALL_LOG_LEVELS.length
+
+  const filteredLines = useMemo(
+    () => (data?.lines ?? []).filter((line) => selectedLevels.has(getLogLineLevel(line))),
+    [data?.lines, selectedLevels],
+  )
+
+  const handleLevelToggle = useCallback((level: LogLevel) => {
+    setSelectedLevels((prev) => {
+      const next = new Set(prev)
+      if (next.has(level)) next.delete(level)
+      else next.add(level)
+      return next
+    })
+  }, [])
+
   const handleDownload = async () => {
-    setDownloading(true)
-    try {
-      const r = await adminApi.downloadServerLogs()
-      const url = URL.createObjectURL(r.data as Blob)
+    if (isFiltered) {
+      const content = filteredLines.join('\n')
+      const blob = new Blob([content], { type: 'text/plain; charset=utf-8' })
+      const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
       a.download = data?.log_file || 'server.log'
       a.click()
       URL.revokeObjectURL(url)
-    } finally {
-      setDownloading(false)
+    } else {
+      setDownloading(true)
+      try {
+        const r = await adminApi.downloadServerLogs()
+        const url = URL.createObjectURL(r.data as Blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = data?.log_file || 'server.log'
+        a.click()
+        URL.revokeObjectURL(url)
+      } finally {
+        setDownloading(false)
+      }
     }
   }
 
@@ -693,25 +766,31 @@ function ServerLogViewer() {
         onAutoRefreshChange={setAutoRefresh}
         onDownload={handleDownload}
         downloading={downloading}
-        downloadDisabled={!data?.available}
+        downloadDisabled={isFiltered ? filteredLines.length === 0 : !data?.available}
+        selectedLevels={selectedLevels}
+        onLevelToggle={handleLevelToggle}
       />
 
       {data?.available && (
         <p className="text-xs text-muted-foreground">
           ファイル: <code className="font-mono">{data.log_file}</code>
           　サイズ: {formatBytes(data.size_bytes)}
-          　最新 {data.lines.length} 行を表示
+          　最新 {data.lines.length} 行取得 / {filteredLines.length} 行表示
         </p>
       )}
 
       {loading ? (
         <p className="text-sm text-muted-foreground">読み込み中…</p>
+      ) : fetchError ? (
+        <p className="text-sm text-red-500">ログの取得に失敗しました。</p>
       ) : !data?.available ? (
         <LogUnavailableNotice logFile={data?.log_file ?? ''} />
-      ) : data.lines.length === 0 ? (
-        <p className="text-sm text-muted-foreground">ログがありません。</p>
+      ) : filteredLines.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          {data.lines.length > 0 ? '選択したレベルのログはありません。' : 'ログがありません。'}
+        </p>
       ) : (
-        <LogOutput lines={data.lines} autoScroll={autoRefresh} />
+        <LogOutput lines={filteredLines} autoScroll={autoRefresh} />
       )}
     </div>
   )

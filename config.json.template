@@ -71,6 +71,11 @@
   // Docker 環境では Dockerfile の ENV が自動的に /data/ideal_bot.db を設定するため変更不要です。
   "db_path": "ideal_bot.db",
 
+  // ログファイルのパス（省略または空文字の場合はファイル出力なし）
+  // 管理画面の「サーバーログ」タブでリアルタイム閲覧・ダウンロードできます。
+  // 相対パスの場合は起動ディレクトリ基準です。
+  "log_file": "ideal_bot.log",
+
   // ログレベル
   // 利用可能: "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"
   "log_level": "INFO",
