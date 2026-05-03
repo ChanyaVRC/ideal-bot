@@ -11,11 +11,17 @@ import pytest
 from src.logging_setup import setup_file_logging
 
 
-def _make_cfg(log_file: str = "", log_max_bytes: int = 1024, log_backup_count: int = 1):
+def _make_cfg(
+    log_file: str = "",
+    log_max_bytes: int = 1024,
+    log_backup_count: int = 1,
+    log_level: str = "INFO",
+):
     cfg = MagicMock()
     cfg.log_file = log_file
     cfg.log_max_bytes = log_max_bytes
     cfg.log_backup_count = log_backup_count
+    cfg.log_level = log_level
     return cfg
 
 
@@ -31,9 +37,11 @@ def _rfh_count_for(abs_path: str) -> int:
 
 @pytest.fixture(autouse=True)
 def _clean_root_handlers():
-    """Remove RotatingFileHandlers added during a test so they don't bleed across tests."""
-    yield
+    """Remove RotatingFileHandlers and restore the root level after each test."""
     root = logging.getLogger()
+    original_level = root.level
+    yield
+    root.setLevel(original_level)
     for h in list(root.handlers):
         if isinstance(h, RotatingFileHandler):
             h.close()
@@ -45,6 +53,23 @@ def test_empty_log_file_adds_no_handler():
     before = len(root.handlers)
     setup_file_logging(_make_cfg(log_file=""))
     assert len(root.handlers) == before
+
+
+def test_root_level_is_applied_from_config(tmp_path):
+    log_path = str(tmp_path / "level.log")
+    setup_file_logging(_make_cfg(log_file=log_path, log_level="DEBUG"))
+    assert logging.getLogger().level == logging.DEBUG
+
+
+def test_root_level_applied_even_without_log_file():
+    setup_file_logging(_make_cfg(log_file="", log_level="WARNING"))
+    assert logging.getLogger().level == logging.WARNING
+
+
+def test_invalid_log_level_falls_back_to_info(tmp_path):
+    log_path = str(tmp_path / "fallback.log")
+    setup_file_logging(_make_cfg(log_file=log_path, log_level="NOTAVALIDLEVEL"))
+    assert logging.getLogger().level == logging.INFO
 
 
 def test_configured_log_file_adds_rotating_handler(tmp_path):

@@ -17,13 +17,6 @@ from src.state import BotState
 logger = logging.getLogger(__name__)
 
 
-def _resolve_log_level(level_name: str) -> int:
-    level = getattr(logging, level_name.upper(), None)
-    if isinstance(level, int):
-        return level
-    return logging.INFO
-
-
 def _should_sync_commands() -> bool:
     # Default is sync-on-start. Set SYNC_COMMANDS=0 to explicitly skip.
     raw = os.environ.get("SYNC_COMMANDS")
@@ -164,7 +157,6 @@ async def main() -> None:
     logger.debug("Loading configuration from config.json")
 
     config = load_config()
-    logging.getLogger().setLevel(_resolve_log_level(config.log_level))
     from src.logging_setup import setup_file_logging
     setup_file_logging(config)
     logger.info("Configuration loaded.")

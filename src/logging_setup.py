@@ -11,18 +11,24 @@ _LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 
 
 def setup_file_logging(cfg: "Config") -> None:
-    """Add a RotatingFileHandler to the root logger if log_file is configured.
+    """Set the root logger level from config and, if log_file is configured,
+    attach a RotatingFileHandler.
 
-    Safe to call multiple times — skips setup if a handler for the same file
-    already exists (prevents duplicate log entries on uvicorn hot-reload).
+    Safe to call multiple times — skips handler registration if one for the
+    same file already exists (prevents duplicate entries on uvicorn hot-reload).
+    The root logger level is always applied so that INFO/DEBUG messages are not
+    silently dropped when no basicConfig call precedes this (e.g. the API server
+    path which skips logging.basicConfig).
     """
+    root = logging.getLogger()
+    root.setLevel(getattr(logging, cfg.log_level.upper(), logging.INFO))
+
     if not cfg.log_file:
         return
 
     from logging.handlers import RotatingFileHandler
 
     abs_path = os.path.abspath(cfg.log_file)
-    root = logging.getLogger()
 
     for handler in root.handlers:
         if (
