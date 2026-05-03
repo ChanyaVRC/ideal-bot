@@ -135,7 +135,9 @@ async def generate_response_with_context(
                 theme=theme,
                 target_range=target_range,
             )
-            return response, _format_message_context_snapshot(context_messages, theme), None
+            if response:
+                return response, _format_message_context_snapshot(context_messages, theme), None
+            logger.warning("LLM returned empty response, falling back to local AI")
         except Exception:
             logger.exception("LLM generation failed, falling back to local AI")
 
