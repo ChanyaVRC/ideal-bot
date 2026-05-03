@@ -68,3 +68,13 @@ class BotState:
         state = self.active_channels.get(channel_id)
         if state is not None:
             state.paused_until = None
+
+    def purge_stale(self, max_idle_minutes: int) -> None:
+        now = datetime.now(UTC)
+        stale = [
+            ch for ch, s in self.active_channels.items()
+            if (now - s.last_message_at).total_seconds() / 60 > max_idle_minutes
+        ]
+        for ch in stale:
+            del self.active_channels[ch]
+            self._locks.pop(ch, None)

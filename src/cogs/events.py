@@ -27,6 +27,7 @@ class EventsCog(commands.Cog):
         try:
             retention = self.bot.cfg.conversation_log_retention_days  # type: ignore[attr-defined]
             await log_db.purge_old_messages(self.bot.db, retention)  # type: ignore[attr-defined]
+            self.bot.state.purge_stale(60)  # type: ignore[attr-defined]
         except Exception:
             logger.exception("Log cleanup failed")
 
