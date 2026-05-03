@@ -194,6 +194,10 @@ async def _resolve_llm(
         except Exception:
             logger.debug("Failed to decrypt global LLM API key; falling back to local AI")
 
+    # vLLM requires no API key; use global provider/model when configured globally.
+    if global_provider == "vllm":
+        return None, global_provider, global_model
+
     return None, settings.llm_provider, settings.llm_model
 
 

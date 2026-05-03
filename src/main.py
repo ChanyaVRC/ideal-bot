@@ -76,6 +76,10 @@ class IdealBot(commands.Bot):
             generation_model=self.cfg.local_generation_model,
             cpu_only_mode=self.cfg.cpu_only_mode,
         )
+        has_remote_llm = bool(await bot_settings_db.get_value(self.db, "global_llm_api_key")) or \
+                         bool(await bot_settings_db.get_value(self.db, "vllm_base_url"))
+        if has_remote_llm:
+            self.local_ai.release_generator()
         asyncio.create_task(self.local_ai.preload())
         logger.info("Background AI model loading has started.")
 
@@ -115,18 +119,29 @@ class IdealBot(commands.Bot):
                 logger.exception("Error in sync commands poller")
 
     async def _reload_generator_poller(self) -> None:
-        """Poll bot_settings for a generator reload request from the admin API."""
+        """Poll bot_settings for generator reload requests and remote-LLM state changes."""
         while not self.is_closed():
             await asyncio.sleep(30)
             try:
+                has_remote_llm = bool(await bot_settings_db.get_value(self.db, "global_llm_api_key")) or \
+                                 bool(await bot_settings_db.get_value(self.db, "vllm_base_url"))
+
                 flag = await bot_settings_db.get_value(self.db, "reload_generator_requested")
                 if flag == "1":
                     await bot_settings_db.set_value(self.db, "reload_generator_requested", "0")
-                    dtype = await bot_settings_db.get_value(self.db, "local_torch_dtype")
-                    quant = await bot_settings_db.get_value(self.db, "local_quantization_mode")
-                    self.local_ai.update_generation_config(dtype, quant)
-                    logger.info("Generator reload requested via admin panel. Reloading...")
-                    asyncio.create_task(self.local_ai.reload_generator_async())
+                    if not has_remote_llm:
+                        dtype = await bot_settings_db.get_value(self.db, "local_torch_dtype")
+                        quant = await bot_settings_db.get_value(self.db, "local_quantization_mode")
+                        self.local_ai.update_generation_config(dtype, quant)
+                        logger.info("Generator reload requested via admin panel. Reloading...")
+                        asyncio.create_task(self.local_ai.reload_generator_async())
+                    else:
+                        logger.info("Generator reload requested but remote LLM is active; skipping.")
+
+                if has_remote_llm:
+                    self.local_ai.release_generator()
+                else:
+                    self.local_ai.restore_generator()
             except Exception:
                 logger.exception("Error in reload generator poller")
 
