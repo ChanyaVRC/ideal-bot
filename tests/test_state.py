@@ -74,3 +74,48 @@ def test_stop_removes_lock():
     state.get_lock(1)
     state.stop_conversation(1)
     assert 1 not in state._locks
+
+
+# ---------------------------------------------------------------------------
+# purge_stale
+# ---------------------------------------------------------------------------
+
+
+def test_purge_stale_removes_idle_channels():
+    state = BotState()
+    state.enter_conversation(1)
+    state.enter_conversation(2)
+    state.active_channels[1].last_message_at = datetime.now(UTC) - timedelta(minutes=10)
+    state.purge_stale(max_idle_minutes=5)
+    assert 1 not in state.active_channels
+    assert 2 in state.active_channels
+
+
+def test_purge_stale_removes_associated_locks():
+    state = BotState()
+    state.enter_conversation(1)
+    state.get_lock(1)
+    state.active_channels[1].last_message_at = datetime.now(UTC) - timedelta(minutes=10)
+    state.purge_stale(max_idle_minutes=5)
+    assert 1 not in state._locks
+
+
+def test_purge_stale_keeps_recent_channels():
+    state = BotState()
+    state.enter_conversation(1)
+    state.purge_stale(max_idle_minutes=5)
+    assert 1 in state.active_channels
+
+
+def test_purge_stale_noop_when_empty():
+    state = BotState()
+    state.purge_stale(max_idle_minutes=5)
+    assert state.active_channels == {}
+
+
+def test_purge_stale_boundary_exact_threshold_is_stale():
+    state = BotState()
+    state.enter_conversation(1)
+    state.active_channels[1].last_message_at = datetime.now(UTC) - timedelta(minutes=5, seconds=1)
+    state.purge_stale(max_idle_minutes=5)
+    assert 1 not in state.active_channels

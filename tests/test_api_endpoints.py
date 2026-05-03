@@ -586,3 +586,42 @@ class TestServerLogs:
         r = await client.get("/api/admin/server-logs")
         data = r.json()
         assert data["size_bytes"] == len(content.encode("utf-8"))
+
+
+# ---------------------------------------------------------------------------
+# Admin: vLLM settings
+# ---------------------------------------------------------------------------
+
+
+class TestVllmSettings:
+    async def test_vllm_base_url_defaults_to_empty(self, admin_client):
+        r = await admin_client.get("/api/admin/settings")
+        assert r.status_code == 200
+        assert r.json()["vllm_base_url"] == ""
+
+    async def test_vllm_base_url_roundtrip(self, admin_client):
+        await admin_client.patch(
+            "/api/admin/settings",
+            json={"vllm_base_url": "http://localhost:8000/v1"},
+        )
+        r = await admin_client.get("/api/admin/settings")
+        assert r.json()["vllm_base_url"] == "http://localhost:8000/v1"
+
+    async def test_vllm_base_url_cleared_on_empty_string(self, admin_client):
+        await admin_client.patch(
+            "/api/admin/settings",
+            json={"vllm_base_url": "http://localhost:8000/v1"},
+        )
+        await admin_client.patch("/api/admin/settings", json={"vllm_base_url": ""})
+        r = await admin_client.get("/api/admin/settings")
+        assert r.json()["vllm_base_url"] == ""
+
+    async def test_vllm_provider_roundtrip(self, admin_client):
+        await admin_client.patch(
+            "/api/admin/settings",
+            json={"global_llm_provider": "vllm", "global_llm_model": "my-model"},
+        )
+        r = await admin_client.get("/api/admin/settings")
+        data = r.json()
+        assert data["global_llm_provider"] == "vllm"
+        assert data["global_llm_model"] == "my-model"
