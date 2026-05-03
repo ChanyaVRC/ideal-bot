@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 import aiosqlite
 
@@ -20,10 +20,10 @@ async def get_cached_bot_guild_ids(
         return None
 
     try:
-        synced_at = datetime.fromisoformat(row["value"])
+        synced_at = datetime.fromisoformat(row["value"]).replace(tzinfo=UTC)
     except ValueError:
         return None
-    age = (datetime.utcnow() - synced_at).total_seconds()
+    age = (datetime.now(UTC) - synced_at).total_seconds()
     if age > max_age_seconds:
         return None
 
