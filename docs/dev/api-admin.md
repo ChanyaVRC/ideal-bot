@@ -17,7 +17,12 @@
   "global_llm_provider": "openai",
   "global_llm_model": "gpt-4o-mini",
   "discord_cache_ttl": 300,
-  "local_system_prompt": "あなたは「{bot_name}」です..."
+  "cpu_only_mode": false,
+  "local_system_prompt": "あなたは「{bot_name}」です...",
+  "local_torch_dtype": "auto",
+  "local_supported_torch_dtypes": ["auto", "float32", "bfloat16", "float16"],
+  "local_quantization_mode": "none",
+  "vllm_base_url": ""
 }
 ```
 
@@ -27,7 +32,12 @@
 | `global_llm_provider` | string | グローバルデフォルトのプロバイダー |
 | `global_llm_model` | string | グローバルデフォルトのモデル |
 | `discord_cache_ttl` | int | Discord ギルド情報のキャッシュ TTL（秒） |
+| `cpu_only_mode` | boolean | CPU のみモードが有効か（`config.json` の設定を反映） |
 | `local_system_prompt` | string | ローカル LLM 用システムプロンプトテンプレート（変数: `{bot_name}`, `{target_length}`） |
+| `local_torch_dtype` | string | ローカル生成モデルの torch dtype（例: `"auto"`, `"float16"`, `"bfloat16"`） |
+| `local_supported_torch_dtypes` | string[] | 現在の環境で使用可能な dtype 一覧 |
+| `local_quantization_mode` | string | 量子化モード（`"none"` / `"4bit"` / `"8bit"`） |
+| `vllm_base_url` | string | vLLM エンドポイント URL（未設定時は空文字） |
 
 ---
 
@@ -42,11 +52,16 @@
   "global_llm_provider": "openai",
   "global_llm_model": "gpt-4o-mini",
   "discord_cache_ttl": 300,
-  "local_system_prompt": "あなたは「{bot_name}」です..."
+  "local_system_prompt": "あなたは「{bot_name}」です...",
+  "local_torch_dtype": "float16",
+  "local_quantization_mode": "none",
+  "vllm_base_url": "http://localhost:8000/v1"
 }
 ```
 
-> `global_llm_api_key` は Fernet で暗号化して保存されます。空文字列 `""` を送ると既存キーを削除します。
+> `global_llm_api_key` は Fernet で暗号化して保存されます。空文字列 `""` を送ると既存キーを削除します。  
+> `vllm_base_url` に値を設定するとローカル生成モデルが自動解放されます。空文字列 `""` で削除（ローカル AI モードに戻る）。  
+> `local_torch_dtype` / `local_quantization_mode` を変更した後は `POST /api/admin/reload-generator` でモデルを再ロードしてください。
 
 **レスポンス:**
 ```json
@@ -184,3 +199,43 @@ Bot にスラッシュコマンドの再同期を要求します。Bot が次回
 ```json
 { "ok": true }
 ```
+
+---
+
+### `GET /api/admin/server-logs`
+
+アプリケーションログファイルの末尾 N 行を返します。
+
+**クエリパラメータ:**
+
+| パラメータ | 型 | デフォルト | 説明 |
+|-----------|-----|----------|------|
+| `lines` | int | `200` | 取得する末尾行数（1〜5000） |
+
+**レスポンス:**
+```json
+{
+  "lines": [
+    "2026-05-04 12:00:00 [INFO] src.main: Bot initialization is complete.",
+    "2026-05-04 12:00:01 [WARNING] src.cogs.conv: ..."
+  ],
+  "log_file": "/data/ideal_bot.log",
+  "available": true,
+  "size_bytes": 204800
+}
+```
+
+| フィールド | 型 | 説明 |
+|-----------|-----|------|
+| `lines` | string[] | ログの末尾 N 行 |
+| `log_file` | string | ログファイルのパス |
+| `available` | boolean | `false` の場合はログファイル未設定またはファイルが存在しない |
+| `size_bytes` | int | ログファイルの現在のサイズ（バイト） |
+
+---
+
+### `GET /api/admin/server-logs/download`
+
+ログファイル全体をダウンロードします（`Content-Disposition: attachment` レスポンス）。
+
+> `config.json` の `log_file` が設定されていない場合は `404` を返します。
