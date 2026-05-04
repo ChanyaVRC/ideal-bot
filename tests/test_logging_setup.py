@@ -37,15 +37,29 @@ def _rfh_count_for(abs_path: str) -> int:
 
 @pytest.fixture(autouse=True)
 def _clean_root_handlers():
-    """Remove RotatingFileHandlers and restore the root level after each test."""
+    """Remove handlers added during a test and restore root level + uvicorn logger state."""
     root = logging.getLogger()
     original_level = root.level
+    orig_root_handlers = list(root.handlers)
+
+    uv_state: dict = {}
+    for name in ("uvicorn", "uvicorn.access", "uvicorn.error"):
+        uv = logging.getLogger(name)
+        uv_state[name] = (list(uv.handlers), uv.propagate)
+
     yield
+
     root.setLevel(original_level)
     for h in list(root.handlers):
-        if isinstance(h, RotatingFileHandler):
-            h.close()
+        if h not in orig_root_handlers:
+            if isinstance(h, RotatingFileHandler):
+                h.close()
             root.removeHandler(h)
+
+    for name, (handlers, propagate) in uv_state.items():
+        uv = logging.getLogger(name)
+        uv.handlers = handlers
+        uv.propagate = propagate
 
 
 def test_empty_log_file_adds_no_handler():
@@ -117,3 +131,74 @@ def test_different_files_get_separate_handlers(tmp_path):
     setup_file_logging(_make_cfg(log_file=path_b))
     assert _rfh_count_for(path_a) == 1
     assert _rfh_count_for(path_b) == 1
+
+
+# ---------------------------------------------------------------------------
+# StreamHandler added when root has none (api/uvicorn process scenario)
+# ---------------------------------------------------------------------------
+
+
+def test_stream_handler_added_when_root_has_none(tmp_path):
+    root = logging.getLogger()
+    # Remove any StreamHandlers present (simulates uvicorn process without basicConfig)
+    existing_streams = [h for h in root.handlers if isinstance(h, logging.StreamHandler) and not isinstance(h, RotatingFileHandler)]
+    for h in existing_streams:
+        root.removeHandler(h)
+
+    setup_file_logging(_make_cfg(log_file=str(tmp_path / "app.log")))
+
+    stream_handlers = [
+        h for h in root.handlers
+        if isinstance(h, logging.StreamHandler) and not isinstance(h, RotatingFileHandler)
+    ]
+    assert len(stream_handlers) >= 1
+
+    for h in existing_streams:
+        root.addHandler(h)
+
+
+def test_stream_handler_not_duplicated_when_already_present(tmp_path):
+    import sys
+    root = logging.getLogger()
+    sh = logging.StreamHandler(sys.stderr)
+    root.addHandler(sh)
+
+    setup_file_logging(_make_cfg(log_file=str(tmp_path / "app.log")))
+
+    stream_handlers = [
+        h for h in root.handlers
+        if isinstance(h, logging.StreamHandler) and not isinstance(h, RotatingFileHandler)
+    ]
+    # Should not have grown — only the one we added
+    assert sum(1 for h in stream_handlers) >= 1
+    root.removeHandler(sh)
+
+
+# ---------------------------------------------------------------------------
+# Uvicorn loggers rerouted through root
+# ---------------------------------------------------------------------------
+
+
+def test_uvicorn_loggers_propagate_after_setup(tmp_path):
+    for name in ("uvicorn", "uvicorn.access", "uvicorn.error"):
+        logging.getLogger(name).propagate = False
+
+    setup_file_logging(_make_cfg(log_file=str(tmp_path / "app.log")))
+
+    for name in ("uvicorn", "uvicorn.access", "uvicorn.error"):
+        assert logging.getLogger(name).propagate is True
+
+
+def test_uvicorn_stream_handlers_removed_to_avoid_duplicates(tmp_path):
+    import sys
+    for name in ("uvicorn", "uvicorn.access"):
+        uv = logging.getLogger(name)
+        uv.addHandler(logging.StreamHandler(sys.stdout))
+        uv.propagate = False
+
+    setup_file_logging(_make_cfg(log_file=str(tmp_path / "app.log")))
+
+    for name in ("uvicorn", "uvicorn.access"):
+        uv = logging.getLogger(name)
+        stream_handlers = [h for h in uv.handlers if isinstance(h, logging.StreamHandler)]
+        assert stream_handlers == [], f"{name} should have no StreamHandlers after setup"
