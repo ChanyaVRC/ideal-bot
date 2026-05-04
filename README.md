@@ -6,9 +6,10 @@ Discord サーバー上で「教えられた単語・フレーズ」を使って
 ## 特徴
 
 - **語彙登録** — `/teach` コマンドで単語をインタラクティブに登録
-- **自然な発言** — 会話コンテキストに応じた SentenceTransformers によるローカル AI、または OpenAI/Gemini LLM で発言生成
+- **自然な発言** — ローカル AI（SentenceTransformers + transformers pipeline）・OpenAI/Gemini LLM・vLLM（OpenAI 互換の自前推論サーバー）で発言生成
 - **会話モード** — メンション or 反応発言をトリガーに、チャンネルへ継続参加
 - **Web 管理画面** — Discord OAuth2 認証付き React 管理 UI（Bot 管理者・サーバー管理者の 2 階層）
+- **サーバーログビューアー** — 管理画面からログをリアルタイム閲覧・レベル絞り込み・ダウンロード
 - **サーバー分離** — ギルドごとに語彙・設定・LLM API キーを完全分離
 - **応答遅延** — 「読んでいる」「タイピングしている」感を再現する遅延機構
 
@@ -17,7 +18,7 @@ Discord サーバー上で「教えられた単語・フレーズ」を使って
 | レイヤー | 技術 |
 |---------|------|
 | Discord Bot | Python 3.11+, discord.py v2 |
-| AI / LLM | sentence-transformers, OpenAI, Google Gemini |
+| AI / LLM | sentence-transformers, transformers, OpenAI, Google Gemini, vLLM |
 | DB | SQLite (aiosqlite) |
 | Web API | FastAPI, Starlette SessionMiddleware |
 | Web UI | React 18, TypeScript, Vite, shadcn/ui, Zustand |
@@ -185,22 +186,20 @@ cp config.json.template config.json
 ```
 
 `config.json` を編集して必要な値を設定します。
-DB のパスはコンテナ内のデータボリュームに合わせて `/data/ideal_bot.db` にしてください。
 
 ```json
 {
   "discord_token": "YOUR_BOT_TOKEN",
   "encryption_master_key": "YOUR_FERNET_KEY",
-  "db_path": "/data/ideal_bot.db",
   "web_url": "http://your-domain.com",
   "discord_client_id": "...",
   "discord_client_secret": "...",
-  "discord_redirect_uri": "http://your-domain.com/auth/callback",
   "session_secret": "...",
-  "bot_admin_ids": ["123456789"],
-  "frontend_url": "http://your-domain.com"
+  "bot_admin_ids": ["123456789"]
 }
 ```
+
+> `db_path`・`log_file` は Dockerfile の ENV が自動的に `/data/ideal_bot.db`・`/data/ideal_bot.log` を設定するため記載不要です。
 
 ### 2. ビルド & 起動
 
@@ -209,7 +208,8 @@ docker compose up --build -d
 ```
 
 - API + Web UI: `http://localhost:8000`
-- DB とモデルキャッシュは Docker ボリュームで永続化されます
+- DB とログは `./data/` ディレクトリに出力されます（初回起動時に自動作成）
+- HuggingFace モデルキャッシュは Docker 名前付きボリュームで管理されます
 
 ### 3. 設定変更
 
@@ -223,9 +223,14 @@ docker compose restart
 ### 4. ログ確認
 
 ```bash
-docker compose logs -f bot
-docker compose logs -f api
+# Docker コンテナの標準出力ログ
+docker compose logs -f
+
+# アプリケーションログファイル（ホストから直接参照可）
+tail -f ./data/ideal_bot.log
 ```
+
+Web 管理画面の **Bot 管理者 → サーバーログ** タブでも閲覧・ダウンロードできます。
 
 ### 5. 停止
 
