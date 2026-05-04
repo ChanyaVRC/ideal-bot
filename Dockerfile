@@ -44,6 +44,7 @@ RUN mkdir -p /data
 
 ENV PATH="/app/.venv/bin:$PATH" \
     DB_PATH=/data/ideal_bot.db \
+    LOG_FILE=/data/ideal_bot.log \
     WEB_HOST=0.0.0.0 \
     WEB_PORT=8000 \
     PYTHONUNBUFFERED=1
