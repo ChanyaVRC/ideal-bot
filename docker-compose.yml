@@ -3,6 +3,8 @@ services:
     build: .
     command: python -m src.main
     restart: unless-stopped
+    environment:
+      LOG_FILE: /data/ideal_bot.log
     volumes:
       - type: bind
         source: ${CONFIG_FILE:-./config.json}
@@ -10,7 +12,11 @@ services:
         read_only: true
         bind:
           create_host_path: false
-      - data:/data
+      - type: bind
+        source: ${DATA_DIR:-./data}
+        target: /data
+        bind:
+          create_host_path: true
       - hf_cache:/root/.cache/huggingface
     depends_on:
       - api
@@ -25,6 +31,8 @@ services:
     restart: unless-stopped
     ports:
       - "8000:8000"
+    environment:
+      LOG_FILE: /data/ideal_bot.log
     volumes:
       - type: bind
         source: ${CONFIG_FILE:-./config.json}
@@ -32,9 +40,12 @@ services:
         read_only: true
         bind:
           create_host_path: false
-      - data:/data
+      - type: bind
+        source: ${DATA_DIR:-./data}
+        target: /data
+        bind:
+          create_host_path: true
       - hf_cache:/root/.cache/huggingface
 
 volumes:
-  data:
   hf_cache:
