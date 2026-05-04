@@ -41,7 +41,7 @@ cp config.json.template config.json
 }
 ```
 
-> `db_path` は Dockerfile の ENV (`/data/ideal_bot.db`) が自動的に設定されるため記載不要です。  
+> `db_path` と `log_file` は Dockerfile の ENV（`/data/ideal_bot.db`・`/data/ideal_bot.log`）が自動的に設定されるため記載不要です。  
 > `discord_redirect_uri` / `frontend_url` は `web_url` から自動導出されます。
 
 ```bash
@@ -54,12 +54,32 @@ docker compose logs -f
 
 `config.json` をホスト側で編集後、`docker compose restart` のみで設定を反映できます。
 
-### ボリューム
+### データディレクトリ
 
-| ボリューム | 内容 |
-|-----------|------|
-| `data` | SQLite DB (`/data/ideal_bot.db`) |
-| `hf_cache` | HuggingFace モデルキャッシュ |
+デフォルトではリポジトリ直下に `./data/` ディレクトリが自動作成され、以下のファイルが生成されます。
+
+| ファイル | 内容 |
+|---------|------|
+| `./data/ideal_bot.db` | SQLite データベース |
+| `./data/ideal_bot.log` | アプリケーションログ |
+
+パスを変えたい場合は `DATA_DIR` 環境変数で上書きできます。
+
+```bash
+DATA_DIR=/opt/botdata docker compose up -d
+```
+
+`hf_cache`（HuggingFace モデルキャッシュ）は Docker 管理の名前付きボリュームとして保持されます。
+
+### ログの確認
+
+ホストから直接ログをテールできます。
+
+```bash
+tail -f ./data/ideal_bot.log
+```
+
+Web 管理画面の **Bot 管理者 → サーバーログ** タブでも、最新ログの閲覧・レベル絞り込み・ダウンロードができます。
 
 ### nginx リバースプロキシ
 
@@ -111,12 +131,6 @@ sudo certbot --nginx -d your-domain.com
 ```
 
 certbot が nginx 設定を自動更新します。その後 `docker compose up -d` で起動してください。
-
-### ログの確認
-
-```bash
-docker compose logs -f
-```
 
 ---
 
