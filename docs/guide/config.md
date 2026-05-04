@@ -30,6 +30,20 @@ cp config.json.template config.json
 | `delay_type_cps` | タイピング速度（文字/秒） | `5` |
 | `conversation_log_retention_days` | 会話ログの保持日数 | `7` |
 
+## ログ設定
+
+| キー | 説明 | デフォルト |
+|------|------|----------|
+| `log_file` | ログファイルのパス。空文字の場合はファイル出力なし | `""` |
+| `log_level` | ログレベル (`DEBUG` / `INFO` / `WARNING` / `ERROR` / `CRITICAL`) | `INFO` |
+| `log_max_bytes` | ログファイルの最大サイズ（バイト）。超えると自動ローテーション | `10485760`（10 MB）|
+| `log_backup_count` | ローテーション後の保持世代数 | `3` |
+
+ログファイルを設定すると、Web 管理画面の **Bot 管理者 → サーバーログ** タブでリアルタイム閲覧・ダウンロードができます。
+
+> Docker 環境では `LOG_FILE` 環境変数が自動的に `/data/ideal_bot.log` を設定します（`config.json` の `log_file` より優先）。  
+> ログは `./data/ideal_bot.log` としてホストから直接参照できます。
+
 ## Web 管理画面設定
 
 | キー | 説明 | デフォルト |
