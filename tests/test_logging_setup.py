@@ -163,14 +163,17 @@ def test_stream_handler_not_duplicated_when_already_present(tmp_path):
     sh = logging.StreamHandler(sys.stderr)
     root.addHandler(sh)
 
-    setup_file_logging(_make_cfg(log_file=str(tmp_path / "app.log")))
-
-    stream_handlers = [
-        h for h in root.handlers
+    count_before = sum(
+        1 for h in root.handlers
         if isinstance(h, logging.StreamHandler) and not isinstance(h, RotatingFileHandler)
-    ]
-    # Should not have grown — only the one we added
-    assert sum(1 for h in stream_handlers) >= 1
+    )
+    setup_file_logging(_make_cfg(log_file=str(tmp_path / "app.log")))
+    count_after = sum(
+        1 for h in root.handlers
+        if isinstance(h, logging.StreamHandler) and not isinstance(h, RotatingFileHandler)
+    )
+
+    assert count_after == count_before  # must not add a second StreamHandler
     root.removeHandler(sh)
 
 
