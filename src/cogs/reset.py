@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import discord
 from discord import app_commands
 from discord.ext import commands
 
 from src.db import words as words_db
+
+if TYPE_CHECKING:
+    from src.main import IdealBot
 
 
 class ResetConfirmView(discord.ui.View):
@@ -30,7 +35,7 @@ class ResetConfirmView(discord.ui.View):
 
 
 class ResetCog(commands.Cog):
-    def __init__(self, bot: commands.Bot) -> None:
+    def __init__(self, bot: "IdealBot") -> None:
         self.bot = bot
 
     @app_commands.command(name="reset", description="このサーバーの登録単語を全削除します（管理者専用）")
@@ -39,7 +44,7 @@ class ResetCog(commands.Cog):
         assert interaction.guild is not None
         guild_id = str(interaction.guild.id)
 
-        words = await words_db.get_words(self.bot.db, guild_id)  # type: ignore[attr-defined]
+        words = await words_db.get_words(self.bot.db, guild_id)
         count = len(words)
         if count == 0:
             await interaction.response.send_message(
@@ -61,10 +66,10 @@ class ResetCog(commands.Cog):
             )
             return
 
-        await self.bot.db.execute(  # type: ignore[attr-defined]
+        await self.bot.db.execute(
             "DELETE FROM words WHERE guild_id = ?", (guild_id,)
         )
-        await self.bot.db.commit()  # type: ignore[attr-defined]
+        await self.bot.db.commit()
         await interaction.edit_original_response(
             content=f"🗑️ {count} 件の単語を削除しました。",
             view=discord.ui.View(),

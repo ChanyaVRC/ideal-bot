@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
+from typing import TYPE_CHECKING
 
 import discord
 from discord.ext import commands, tasks
@@ -11,11 +12,14 @@ from src.ai.generator import generate_response_with_context
 from src.db import conversation_log as log_db
 from src.db import guild_settings as settings_db
 
+if TYPE_CHECKING:
+    from src.main import IdealBot
+
 logger = logging.getLogger(__name__)
 
 
 class EventsCog(commands.Cog):
-    def __init__(self, bot: commands.Bot) -> None:
+    def __init__(self, bot: "IdealBot") -> None:
         self.bot = bot
         self._cleanup_task.start()
 
@@ -25,9 +29,9 @@ class EventsCog(commands.Cog):
     @tasks.loop(minutes=5)
     async def _cleanup_task(self) -> None:
         try:
-            retention = self.bot.cfg.conversation_log_retention_days  # type: ignore[attr-defined]
-            await log_db.purge_old_messages(self.bot.db, retention)  # type: ignore[attr-defined]
-            self.bot.state.purge_stale(60)  # type: ignore[attr-defined]
+            retention = self.bot.cfg.conversation_log_retention_days
+            await log_db.purge_old_messages(self.bot.db, retention)
+            self.bot.state.purge_stale(60)
         except Exception:
             logger.exception("Log cleanup failed")
 
@@ -40,7 +44,7 @@ class EventsCog(commands.Cog):
         channel_id = message.channel.id
 
         await log_db.add_message(
-            self.bot.db,  # type: ignore[attr-defined]
+            self.bot.db,
             guild_id,
             str(channel_id),
             str(message.author.id),
@@ -48,16 +52,16 @@ class EventsCog(commands.Cog):
             is_bot=False,
         )
         await log_db.purge_channel(
-            self.bot.db, guild_id, str(channel_id)  # type: ignore[attr-defined]
+            self.bot.db, guild_id, str(channel_id)
         )
 
         settings = await settings_db.ensure_settings(
-            self.bot.db, guild_id  # type: ignore[attr-defined]
+            self.bot.db, guild_id
         )
         if not settings.bot_enabled:
             return
 
-        state = self.bot.state  # type: ignore[attr-defined]
+        state = self.bot.state
 
         # If already processing this channel, just update conv TTL
         if channel_id in state.processing_channels:
@@ -89,27 +93,27 @@ class EventsCog(commands.Cog):
             state.processing_channels.add(channel_id)
             state.enter_conversation(channel_id)
             try:
-                read_min = settings.delay_read_min or self.bot.cfg.delay_read_min  # type: ignore[attr-defined]
-                read_max = settings.delay_read_max or self.bot.cfg.delay_read_max  # type: ignore[attr-defined]
+                read_min = settings.delay_read_min or self.bot.cfg.delay_read_min
+                read_max = settings.delay_read_max or self.bot.cfg.delay_read_max
                 await asyncio.sleep(random.uniform(read_min, read_max))
 
                 async with message.channel.typing():
                     response, reply_context, metadata = await generate_response_with_context(
-                        db=self.bot.db,  # type: ignore[attr-defined]
-                        config=self.bot.cfg,  # type: ignore[attr-defined]
-                        local_ai=self.bot.local_ai,  # type: ignore[attr-defined]
+                        db=self.bot.db,
+                        config=self.bot.cfg,
+                        local_ai=self.bot.local_ai,
                         guild_id=guild_id,
                         channel_id=str(channel_id),
                         bot_name=self.bot.user.name,
                     )
                     logger.debug("Sending response in guild %s channel %s: %r", guild_id, channel_id, response)
-                    type_cps = settings.delay_type_cps or self.bot.cfg.delay_type_cps  # type: ignore[attr-defined]
+                    type_cps = settings.delay_type_cps or self.bot.cfg.delay_type_cps
                     type_delay = min(8.0, max(1.0, len(response) / type_cps))
                     await asyncio.sleep(type_delay)
 
                 await message.channel.send(response)
                 await log_db.add_message(
-                    self.bot.db,  # type: ignore[attr-defined]
+                    self.bot.db,
                     guild_id,
                     str(channel_id),
                     str(self.bot.user.id),

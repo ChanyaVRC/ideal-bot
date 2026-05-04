@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING
 
 import discord
 from discord import app_commands
@@ -8,9 +9,12 @@ from discord.ext import commands
 
 from src.db import guild_settings as settings_db
 
+if TYPE_CHECKING:
+    from src.main import IdealBot
+
 
 class ConvCog(commands.Cog):
-    def __init__(self, bot: commands.Bot) -> None:
+    def __init__(self, bot: "IdealBot") -> None:
         self.bot = bot
 
     conv_group = app_commands.Group(
@@ -22,7 +26,7 @@ class ConvCog(commands.Cog):
     @conv_group.command(name="stop", description="このチャンネルの会話モードを即時終了します")
     async def conv_stop(self, interaction: discord.Interaction) -> None:
         channel_id = interaction.channel_id
-        state = self.bot.state  # type: ignore[attr-defined]
+        state = self.bot.state
         if channel_id not in state.active_channels:
             await interaction.response.send_message(
                 "このチャンネルは現在会話モードではありません。", ephemeral=True
@@ -41,7 +45,7 @@ class ConvCog(commands.Cog):
         minutes: app_commands.Range[int, 1, 1440],
     ) -> None:
         channel_id = interaction.channel_id
-        state = self.bot.state  # type: ignore[attr-defined]
+        state = self.bot.state
         if channel_id not in state.active_channels:
             await interaction.response.send_message(
                 "このチャンネルは現在会話モードではありません。", ephemeral=True
@@ -56,9 +60,9 @@ class ConvCog(commands.Cog):
     @conv_group.command(name="status", description="アクティブな会話モードの一覧と残り時間を表示します")
     async def conv_status(self, interaction: discord.Interaction) -> None:
         assert interaction.guild is not None
-        state = self.bot.state  # type: ignore[attr-defined]
+        state = self.bot.state
         settings = await settings_db.ensure_settings(
-            self.bot.db, str(interaction.guild.id)  # type: ignore[attr-defined]
+            self.bot.db, str(interaction.guild.id)
         )
         ttl = settings.conversation_ttl
 

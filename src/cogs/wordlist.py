@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -8,9 +10,12 @@ from src.db import words as words_db
 from src.utils.normalize import get_category_reading
 from src.views.word_list_paginator import WordListPaginator
 
+if TYPE_CHECKING:
+    from src.main import IdealBot
+
 
 class WordListCog(commands.Cog):
-    def __init__(self, bot: commands.Bot) -> None:
+    def __init__(self, bot: "IdealBot") -> None:
         self.bot = bot
 
     @app_commands.command(name="wordlist", description="登録された単語一覧を表示します")
@@ -21,12 +26,12 @@ class WordListCog(commands.Cog):
         assert interaction.guild is not None
         guild_id = str(interaction.guild.id)
         category_reading = (
-            get_category_reading(self.bot.cfg.category_normalization, category)  # type: ignore[attr-defined]
+            get_category_reading(self.bot.cfg.category_normalization, category)
             if category
             else None
         )
         word_list = await words_db.get_words(
-            self.bot.db, guild_id, category_reading  # type: ignore[attr-defined]
+            self.bot.db, guild_id, category_reading
         )
         paginator = WordListPaginator(word_list)
         await interaction.response.send_message(
@@ -40,7 +45,7 @@ class WordListCog(commands.Cog):
         if interaction.guild is None:
             return []
         categories = await words_db.get_categories(
-            self.bot.db, str(interaction.guild.id)  # type: ignore[attr-defined]
+            self.bot.db, str(interaction.guild.id)
         )
         current_lower = current.lower()
         return [
