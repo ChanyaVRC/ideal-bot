@@ -29,10 +29,10 @@ services:
       --host 0.0.0.0
       --port 8000
     restart: unless-stopped
-    environment:
-      LOG_FILE: /data/ideal_bot.log
     ports:
       - "8000:8000"
+    environment:
+      LOG_FILE: /data/ideal_bot.log
     volumes:
       - type: bind
         source: ${CONFIG_FILE:-./config.json}
