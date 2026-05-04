@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -8,6 +10,9 @@ from src.db import teach_allowlist as allowlist_db
 from src.db import words as words_db
 from src.utils.normalize import get_word_reading, resolve_category
 from src.views.overwrite_confirm import OverwriteConfirmView
+
+if TYPE_CHECKING:
+    from src.main import IdealBot
 
 
 async def _compute_embedding(bot: commands.Bot, text: str) -> bytes | None:
@@ -23,7 +28,7 @@ async def _compute_embedding(bot: commands.Bot, text: str) -> bytes | None:
 
 
 class TeachCog(commands.Cog):
-    def __init__(self, bot: commands.Bot) -> None:
+    def __init__(self, bot: "IdealBot") -> None:
         self.bot = bot
 
     @app_commands.command(name="teach", description="単語を登録します")
@@ -42,7 +47,7 @@ class TeachCog(commands.Cog):
             else []
         )
         allowed = await allowlist_db.can_teach(
-            self.bot.db,  # type: ignore[attr-defined]
+            self.bot.db,
             str(interaction.guild.id),
             interaction.user.id,
             role_ids,
@@ -62,20 +67,20 @@ class TeachCog(commands.Cog):
             return
 
         reading = get_word_reading(
-            self.bot.cfg.category_normalization,  # type: ignore[attr-defined]
+            self.bot.cfg.category_normalization,
             word,
         )
         guild_id = str(interaction.guild.id)
         category, category_reading = await resolve_category(
-            self.bot.cfg.category_normalization,  # type: ignore[attr-defined]
-            getattr(self.bot, "local_ai", None),
-            self.bot.db,  # type: ignore[attr-defined]
+            self.bot.cfg.category_normalization,
+            self.bot.local_ai,
+            self.bot.db,
             guild_id,
             category,
         )
 
         existing = await words_db.get_word_by_reading(
-            self.bot.db, guild_id, reading  # type: ignore[attr-defined]
+            self.bot.db, guild_id, reading
         )
 
         if existing is not None:
@@ -92,7 +97,7 @@ class TeachCog(commands.Cog):
                 )
                 return
             await words_db.upsert_word(
-                self.bot.db,  # type: ignore[attr-defined]
+                self.bot.db,
                 guild_id=guild_id,
                 word=word,
                 reading=reading,
@@ -107,7 +112,7 @@ class TeachCog(commands.Cog):
             )
         else:
             await words_db.insert_word(
-                self.bot.db,  # type: ignore[attr-defined]
+                self.bot.db,
                 guild_id=guild_id,
                 word=word,
                 reading=reading,
@@ -127,7 +132,7 @@ class TeachCog(commands.Cog):
         if interaction.guild is None:
             return []
         categories = await words_db.get_categories(
-            self.bot.db, str(interaction.guild.id)  # type: ignore[attr-defined]
+            self.bot.db, str(interaction.guild.id)
         )
         current_lower = current.lower()
         return [

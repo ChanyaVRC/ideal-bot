@@ -5,6 +5,7 @@ import json
 import logging
 import threading
 from functools import partial
+from typing import Any
 
 import numpy as np
 from sentence_transformers import SentenceTransformer
@@ -19,6 +20,57 @@ DEFAULT_LOCAL_SYSTEM_PROMPT = (
     "個人情報は含めないでください。"
     "返答は日本語で、文字数は{target_length}程度にしてください。"
 )
+
+_NEXT_TURN_MARKERS = ("\n\n", "\nUser:", "\nユーザー:", "\nuser:", "\n返答:", "\nAssistant:")
+
+_ASSISTANT_TURN_MARKERS = ("<|im_start|>assistant\n", "<|assistant|>\n", "Assistant:\n")
+
+
+def _build_chat_messages(
+    system_content: str,
+    context_history: list[tuple[bool, str]] | None,
+    reply_target: str,
+) -> list[dict]:
+    messages: list[dict] = [{"role": "system", "content": system_content}]
+    if context_history:
+        for is_bot, text in context_history:
+            role = "assistant" if is_bot else "user"
+            if messages[-1]["role"] == "system" and role == "assistant":
+                continue
+            if messages[-1]["role"] == role:
+                messages[-1]["content"] += "\n" + text
+            else:
+                messages.append({"role": role, "content": text})
+        if messages[-1]["role"] != "user":
+            messages.append({"role": "user", "content": reply_target})
+    else:
+        messages.append({"role": "user", "content": reply_target})
+    return messages
+
+
+def _strip_generated_output(
+    generated: str,
+    prompt: str,
+    prompt_is_prefix: bool,
+    has_chat_template: bool,
+) -> str:
+    if prompt_is_prefix and generated.startswith(prompt):
+        generated = generated[len(prompt):]
+    elif has_chat_template:
+        for marker in _ASSISTANT_TURN_MARKERS:
+            idx = generated.rfind(marker)
+            if idx != -1:
+                generated = generated[idx + len(marker):]
+                break
+        else:
+            if generated.startswith(prompt):
+                generated = generated[len(prompt):]
+    generated = generated.strip()
+    for next_turn in _NEXT_TURN_MARKERS:
+        idx = generated.find(next_turn)
+        if idx != -1:
+            generated = generated[:idx].strip()
+    return generated
 
 try:
     import torch as _torch
@@ -69,7 +121,7 @@ class LocalAI:
                     logger.info("AI embedding model is ready.")
         return self._model
 
-    def _build_cpu_generator(self, tokenizer, resolved_dtype):
+    def _build_cpu_generator(self, tokenizer, resolved_dtype) -> "Any":
         from transformers import pipeline
         # Use pipeline directly so models that load as ConditionalGeneration (e.g. Mistral3)
         # are also accepted; AutoModelForCausalLM rejects those configs.
@@ -83,7 +135,7 @@ class LocalAI:
             model_kwargs={"low_cpu_mem_usage": True},
         )
 
-    def _build_gpu_generator(self, tokenizer, resolved_dtype):
+    def _build_gpu_generator(self, tokenizer, resolved_dtype) -> "Any":
         from transformers import AutoModelForCausalLM, BitsAndBytesConfig, pipeline
         model_kwargs: dict = {"device_map": "auto"}
         if self._quantization_mode == "4bit":
@@ -273,25 +325,7 @@ class LocalAI:
                     target_length=target_length,
                 )
 
-            # 会話履歴から多ターンメッセージを構築する
-            chat_messages: list[dict] = [{"role": "system", "content": system_content}]
-            if context_history:
-                for is_bot, text in context_history:
-                    role = "assistant" if is_bot else "user"
-                    # system の直後に assistant を置くとテンプレートエラーになるためスキップする
-                    if chat_messages[-1]["role"] == "system" and role == "assistant":
-                        continue
-                    # 連続同ロールはテンプレートエラーになるためマージする
-                    if chat_messages and chat_messages[-1]["role"] == role:
-                        chat_messages[-1]["content"] += "\n" + text
-                    else:
-                        chat_messages.append({"role": role, "content": text})
-                # 履歴の最後が assistant なら返信先を最終 user ターンとして追加
-                if chat_messages[-1]["role"] != "user":
-                    chat_messages.append({"role": "user", "content": reply_target})
-            else:
-                chat_messages.append({"role": "user", "content": reply_target})
-            messages = chat_messages
+            messages = _build_chat_messages(system_content, context_history, reply_target)
             prompt = tokenizer.apply_chat_template(
                 messages,
                 tokenize=False,
@@ -332,27 +366,7 @@ class LocalAI:
             generated: str = output_dict.get("generated_text", "")
             metadata_json = json.dumps(output_dict, ensure_ascii=False)
 
-            # プロンプト部分を除去して新規生成テキストだけ取り出す
-            if prompt_is_prefix and generated.startswith(prompt):
-                generated = generated[len(prompt):]
-            elif has_chat_template:
-                # チャットテンプレートの場合、末尾の assistant ターンだけ残す
-                for marker in ("<|im_start|>assistant\n", "<|assistant|>\n", "Assistant:\n"):
-                    idx = generated.rfind(marker)
-                    if idx != -1:
-                        generated = generated[idx + len(marker):]
-                        break
-                else:
-                    # マーカーが見つからなければプロンプト全体を除去
-                    if generated.startswith(prompt):
-                        generated = generated[len(prompt):]
-            generated = generated.strip()
-            # 次ターンへの継続（"User:" / "ユーザー:" など）が生成された場合に除去する
-            for next_turn in ("\n\n", "\nUser:", "\nユーザー:", "\nuser:", "\n返答:", "\nAssistant:"):
-                idx = generated.find(next_turn)
-                if idx != -1:
-                    generated = generated[:idx].strip()
-            
+            generated = _strip_generated_output(generated, prompt, prompt_is_prefix, has_chat_template)
             final_text = generated if generated else (words[0] if words else "")
             return (final_text, metadata_json)
         except Exception:

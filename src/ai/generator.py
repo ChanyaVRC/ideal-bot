@@ -19,6 +19,10 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+_PROVIDER_OPENAI = "openai"
+_PROVIDER_GEMINI = "gemini"
+_PROVIDER_VLLM = "vllm"
+
 
 def _find_latest_user_text(
     *,
@@ -122,7 +126,7 @@ async def generate_response_with_context(
     target_range = _length_target_range(latest_user_text)
 
     vllm_base_url = (
-        await bot_settings_db.get_value(db, "vllm_base_url") if llm_provider == "vllm" else None
+        await bot_settings_db.get_value(db, "vllm_base_url") if llm_provider == _PROVIDER_VLLM else None
     )
     if llm_key or (llm_provider == "vllm" and vllm_base_url):
         try:
@@ -186,7 +190,7 @@ async def _resolve_llm(
             )
 
     global_key_enc = await bot_settings_db.get_value(db, "global_llm_api_key")
-    global_provider = await bot_settings_db.get_value(db, "global_llm_provider") or "openai"
+    global_provider = await bot_settings_db.get_value(db, "global_llm_provider") or _PROVIDER_OPENAI
     global_model = await bot_settings_db.get_value(db, "global_llm_model") or "gpt-4o-mini"
     if global_key_enc:
         try:
@@ -195,7 +199,7 @@ async def _resolve_llm(
             logger.debug("Failed to decrypt global LLM API key; falling back to local AI")
 
     # vLLM requires no API key; use global provider/model when configured globally.
-    if global_provider == "vllm":
+    if global_provider == _PROVIDER_VLLM:
         return None, global_provider, global_model
 
     return None, settings.llm_provider, settings.llm_model
@@ -279,13 +283,13 @@ async def _generate_llm(
         for m in context
     ]
 
-    if provider == "openai":
+    if provider == _PROVIDER_OPENAI:
         from src.ai.llm.openai_provider import OpenAIProvider
         llm = OpenAIProvider(api_key=llm_key or "", model=model)
-    elif provider == "gemini":
+    elif provider == _PROVIDER_GEMINI:
         from src.ai.llm.gemini_provider import GeminiProvider
         llm = GeminiProvider(api_key=llm_key or "", model=model)
-    elif provider == "vllm":
+    elif provider == _PROVIDER_VLLM:
         from src.ai.llm.vllm_provider import VLLMProvider
         if not vllm_base_url:
             raise ValueError("vllm_base_url is required for vllm provider")

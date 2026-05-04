@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -7,9 +9,12 @@ from discord.ext import commands
 from src.db import words as words_db
 from src.utils.normalize import get_word_reading
 
+if TYPE_CHECKING:
+    from src.main import IdealBot
+
 
 class ForgetCog(commands.Cog):
-    def __init__(self, bot: commands.Bot) -> None:
+    def __init__(self, bot: "IdealBot") -> None:
         self.bot = bot
 
     @app_commands.command(name="forget", description="単語を削除します")
@@ -20,12 +25,12 @@ class ForgetCog(commands.Cog):
         assert interaction.guild is not None
         guild_id = str(interaction.guild.id)
         reading = get_word_reading(
-            self.bot.cfg.category_normalization,  # type: ignore[attr-defined]
+            self.bot.cfg.category_normalization,
             word.strip(),
         )
 
         existing = await words_db.get_word_by_reading(
-            self.bot.db, guild_id, reading  # type: ignore[attr-defined]
+            self.bot.db, guild_id, reading
         )
         if existing is None:
             await interaction.response.send_message(
@@ -45,7 +50,7 @@ class ForgetCog(commands.Cog):
             return
 
         await words_db.delete_word_by_reading(
-            self.bot.db, guild_id, reading  # type: ignore[attr-defined]
+            self.bot.db, guild_id, reading
         )
         await interaction.response.send_message(
             f"🗑️ 「{existing.word}」（{existing.category}）を削除しました。",
@@ -59,7 +64,7 @@ class ForgetCog(commands.Cog):
         if interaction.guild is None:
             return []
         pairs = await words_db.get_all_words_for_autocomplete(
-            self.bot.db, str(interaction.guild.id)  # type: ignore[attr-defined]
+            self.bot.db, str(interaction.guild.id)
         )
         current_lower = current.lower()
         return [

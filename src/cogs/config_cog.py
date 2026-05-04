@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import discord
 from discord import app_commands
@@ -9,6 +9,9 @@ from discord.ext import commands
 from src.db import guild_settings as settings_db
 from src.db import teach_allowlist as allowlist_db
 from src.utils.encryption import encrypt
+
+if TYPE_CHECKING:
+    from src.main import IdealBot
 
 PROVIDERS = ["openai", "gemini"]
 MODELS = [
@@ -24,7 +27,7 @@ def _admin_check(interaction: discord.Interaction) -> bool:
 
 
 class ConfigCog(commands.Cog):
-    def __init__(self, bot: commands.Bot) -> None:
+    def __init__(self, bot: "IdealBot") -> None:
         self.bot = bot
 
     config_group = app_commands.Group(
@@ -43,7 +46,7 @@ class ConfigCog(commands.Cog):
     ) -> None:
         assert interaction.guild is not None
         await settings_db.update_setting(
-            self.bot.db, str(interaction.guild.id), reply_rate=rate  # type: ignore[attr-defined]
+            self.bot.db, str(interaction.guild.id), reply_rate=rate
         )
         await interaction.response.send_message(
             f"✅ 反応確率を **{rate}%** に設定しました。", ephemeral=True
@@ -61,7 +64,7 @@ class ConfigCog(commands.Cog):
     ) -> None:
         assert interaction.guild is not None
         await settings_db.update_setting(
-            self.bot.db, str(interaction.guild.id), bot_enabled=bool(enabled)  # type: ignore[attr-defined]
+            self.bot.db, str(interaction.guild.id), bot_enabled=bool(enabled)
         )
         label = "有効" if enabled else "無効"
         await interaction.response.send_message(
@@ -96,7 +99,7 @@ class ConfigCog(commands.Cog):
             )
             return
         await settings_db.update_setting(
-            self.bot.db, str(interaction.guild.id), **kwargs  # type: ignore[attr-defined]
+            self.bot.db, str(interaction.guild.id), **kwargs
         )
         parts = [f"{k}={v}" for k, v in kwargs.items()]
         await interaction.response.send_message(
@@ -118,20 +121,20 @@ class ConfigCog(commands.Cog):
         assert interaction.guild is not None
         guild_id = str(interaction.guild.id)
         if role is None and user is None:
-            await allowlist_db.clear_allowlist(self.bot.db, guild_id)  # type: ignore[attr-defined]
+            await allowlist_db.clear_allowlist(self.bot.db, guild_id)
             await interaction.response.send_message(
                 "✅ 許可リストをリセットしました。全員が登録可能です。", ephemeral=True
             )
         elif role is not None:
             await allowlist_db.add_to_allowlist(
-                self.bot.db, guild_id, str(role.id), "role"  # type: ignore[attr-defined]
+                self.bot.db, guild_id, str(role.id), "role"
             )
             await interaction.response.send_message(
                 f"✅ {role.mention} を許可リストに追加しました。", ephemeral=True
             )
         else:
             await allowlist_db.add_to_allowlist(
-                self.bot.db, guild_id, str(user.id), "user"  # type: ignore[attr-defined]
+                self.bot.db, guild_id, str(user.id), "user"
             )
             await interaction.response.send_message(
                 f"✅ {user.mention} を許可リストに追加しました。", ephemeral=True
@@ -159,7 +162,7 @@ class ConfigCog(commands.Cog):
         target = role or user
         target_id = str(target.id)
         removed = await allowlist_db.remove_from_allowlist(
-            self.bot.db, guild_id, target_id  # type: ignore[attr-defined]
+            self.bot.db, guild_id, target_id
         )
         if removed:
             await interaction.response.send_message(
@@ -176,7 +179,7 @@ class ConfigCog(commands.Cog):
         assert interaction.guild is not None
         guild_id = str(interaction.guild.id)
         entries = await allowlist_db.get_allowlist(
-            self.bot.db, guild_id  # type: ignore[attr-defined]
+            self.bot.db, guild_id
         )
         if not entries:
             await interaction.response.send_message(
@@ -206,9 +209,9 @@ class ConfigCog(commands.Cog):
         key: str,
     ) -> None:
         assert interaction.guild is not None
-        encrypted = encrypt(self.bot.cfg.encryption_master_key, key)  # type: ignore[attr-defined]
+        encrypted = encrypt(self.bot.cfg.encryption_master_key, key)
         await settings_db.update_setting(
-            self.bot.db,  # type: ignore[attr-defined]
+            self.bot.db,
             str(interaction.guild.id),
             llm_api_key=encrypted,
             llm_provider=provider,
@@ -225,7 +228,7 @@ class ConfigCog(commands.Cog):
     ) -> None:
         assert interaction.guild is not None
         await settings_db.update_setting(
-            self.bot.db, str(interaction.guild.id), llm_model=model_name  # type: ignore[attr-defined]
+            self.bot.db, str(interaction.guild.id), llm_model=model_name
         )
         await interaction.response.send_message(
             f"✅ LLM モデルを **{model_name}** に設定しました。", ephemeral=True
