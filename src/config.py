@@ -71,6 +71,7 @@ class Config:
     category_normalization: str = "reading"
     sentence_transformer_model: str = "paraphrase-multilingual-MiniLM-L12-v2"
     local_generation_model: str = "mistralai/Ministral-3-14B-Instruct-2512"
+    hf_token: str = ""
     cpu_only_mode: bool = False
     delay_read_min: float = 10.0
     delay_read_max: float = 30.0
