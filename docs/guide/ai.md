@@ -1,13 +1,18 @@
 # 発言生成の仕組み
 
-ideal-bot は2つのモードで発言を生成します。
+ideal-bot は3つのモードで発言を生成します。
 
 ## 動作モード
 
+優先順位の高い順に適用されます。
+
 | モード | 条件 | 生成方式 |
 |--------|------|---------|
-| **ローカル AI モード** | LLM API キーなし | SentenceTransformers で語彙選択 ＋ ローカル LLM（transformers pipeline）で文生成 |
-| **LLM モード** | LLM API キーあり | LLM（登録語彙 ＋ 会話コンテキストを注入） |
+| **vLLM モード** | `vllm_base_url` が設定済み | OpenAI 互換エンドポイントへリクエスト（自前推論サーバー） |
+| **LLM モード** | グローバルまたはギルド専用 API キーあり | OpenAI / Gemini（登録語彙 ＋ 会話コンテキストを注入） |
+| **ローカル AI モード** | 上記いずれもなし | SentenceTransformers で語彙選択 ＋ ローカル LLM（transformers pipeline）で文生成 |
+
+vLLM または LLM API キーが有効な間は、ローカル生成モデルは自動的に解放されてメモリを節約します（`reload-generator` を実行するまで再ロードしません）。
 
 ## ローカル AI モード
 
@@ -21,6 +26,16 @@ ideal-bot は2つのモードで発言を生成します。
 ```
 
 ローカル生成モデルは `config.json` の `local_generation_model`（Hugging Face モデル ID）で設定します。システムプロンプトは Bot 管理者画面で変更できます（変数: `{bot_name}`, `{target_length}`）。
+
+## vLLM モード
+
+vLLM など OpenAI 互換 API を提供する自前推論サーバーを使う場合に利用します。
+
+**設定方法:** Bot 管理者画面 → グローバル設定 → **vLLM エンドポイント URL** にサーバーの URL を入力します（例: `http://localhost:8000/v1`）。
+
+- URL を設定するとローカル生成モデルは自動的に解放されます
+- URL を空欄にすると LLM モード / ローカル AI モードに戻り、必要に応じてモデルが再ロードされます
+- モデル名・API キーはグローバル LLM 設定と共有されます（API キーは不要な場合は空欄で可）
 
 ## LLM モード
 
