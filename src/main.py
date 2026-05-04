@@ -160,6 +160,9 @@ async def main() -> None:
     config = load_config()
     from src.logging_setup import setup_file_logging
     setup_file_logging(config)
+    if config.huggingface_token:
+        os.environ.setdefault("HF_TOKEN", config.huggingface_token)
+        logger.debug("HF_TOKEN applied from config.")
     logger.info("Configuration loaded.")
     logger.info("Log level: %s", config.log_level.upper())
     logger.debug(
